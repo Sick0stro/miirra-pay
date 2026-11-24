@@ -110,3 +110,35 @@ lives in Miirra Pay.
 - [ ] Draft SLAs (Bank, Merchants, Agents), Dispute/Refund/Chargeback Policy & BCP/Risk Policy (Art. 5(3)(7–8))
 - [ ] Libyan Data Center Hosting Contract + Security/Pen Test Attestation (Art. 10(1), 21(4))
 - [ ] Migrate Neon region from `eu-central-1` (Frankfurt) to an onshore Libya region (Art. 10(1))
+
+<!-- BINDINGS:AUTO (updated 2026-11-24T06:39:14.887Z) — do not edit by hand -->
+### Checklist Traceability (auto-generated)
+
+| ID | Item | Status | Evidence |
+| :-- | :--- | :--- | :--- |
+| A1 | CBL license/sandbox gate on real-money movement | PASS | src/cbl-perimeter.ts requireCblPerimeter(); eval layer 1 (unlicensed → forbidden) |
+| A2 | LYD enforced on domestic instruments | PASS | src/money.ts LEDGER_LYD=1; rail strings "lyd"; forbidden-scan A2-nonlyd |
+| A3 | No unapproved foreign jurisdiction/routing | PASS | assertApprovedRegion(); forbidden-scan A3-offshore |
+| A4 | No crypto/virtual-asset references | PASS | forbidden-scan A4-crypto (see result); scan: no hits in payment paths |
+| B1 | Offline draws only pre-funded settled LYD | PASS | mesh/mesh-adapter.test.mjs (self-transfer mints no credit); eval layer 2 |
+| B2 | Packets carry signature+seq+tx_id+prev_hash | PASS | mesh/mesh-adapter.ts OfflinePaymentPacket; mesh test 1 |
+| B3 | Per-tx/cumulative/duration caps | PASS | mesh-adapter.ts cap checks; mesh test 4 (cumulative cap) |
+| B4 | Reconnect idempotent + double-spend quarantine | PASS | mesh-adapter.ts seq high-water + recordSettled; mesh tests 2,5 |
+| B5 | Mesh isolates networking; Pay enforces rules | PASS | mesh/mesh-adapter.ts MeshTransport boundary; mesh test 6 (no sockets in Pay) |
+| C1 | Segregation: operating vs settlement/sub-agg | PASS | src/ledger-codes.ts SETTLEMENT_AGGREGATION/CUSTOMER_SUB_AGGREGATION/COMPANY_OPERATING; reconcileLedger segregationOk |
+| C2 | No spendable credit before settlement finality | PASS | src/routes/topups.ts confirmTopup (webhook-matched); eval layer 4 |
+| C3 | Automated reconciliation (liability == aggregation) | PASS | src/reconciliation.ts reconcileLedger; GET /api/compliance/reconciliation; eval layer 5 |
+| C4 | LYPay/NAD/IBAN top-up + P2P/P2M/M2M idempotent, ref IDs | PASS | src/lypay.ts two-step; idempotency_key unique index; E2E 31/31 |
+| D1 | KYC/KYB gate + step-up >1000 LYD + AML/velocity | PASS | src/routes/wallets.ts + withdrawals.ts needsFaceVerification; src/aml.ts; eval layer 6 |
+| D2 | TLS/RBAC/dual-control (deploy + mesh) | PASS | Workers TLS 1.3; mesh P2P AEAD; RBAC is deploy-layer (WARN in audit) |
+| D3 | Tamper-evident hash-chained audit | PASS | src/audit.ts appendAudit/verifyAuditChain; eval layer 7 audit/verify |
+| D4 | Consent/export/closure 3-day + complaints | PASS | src/consumer.ts; GET /api/compliance/data/export; eval layer 7 |
+| E1 | 01_audit_report.md with file paths + articles | PASS | present, cites articles |
+| E2 | eval runner passes all automated tests | PASS | evals/cbl/run_all_evals.mjs present |
+| E3 | 02_cbl_readiness_dossier.md populated | PASS | present, AMADAT populated |
+| F1 | Renew registry extract + payment activity scope | HUMAN_REQUIRED | AMADAT counsel — Art. 5(3)(1–2), 8(7) |
+| F2 | Paid-in capital adequacy + Libyan Data Officer | HUMAN_REQUIRED | AMADAT counsel — Art. 5(3)(3–4) |
+| F3 | Bank settlement & aggregation agreement + CBL approval | HUMAN_REQUIRED | Nuran Bank / CBL — Art. 5(2), 12–14 |
+| F4 | 5-yr plan, SLAs, policies, onshore hosting, pilot | HUMAN_REQUIRED | AMADAT — Art. 5–6, 10 |
+Code checks: 20/20 pass · Human-required: 4
+<!-- /BINDINGS:AUTO -->

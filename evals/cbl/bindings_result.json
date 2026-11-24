@@ -1,0 +1,149 @@
+{
+  "generatedAt": "2026-11-24T06:39:14.887Z",
+  "results": [
+    {
+      "id": "A1",
+      "label": "CBL license/sandbox gate on real-money movement",
+      "status": "pass",
+      "evidence": "src/cbl-perimeter.ts requireCblPerimeter(); eval layer 1 (unlicensed → forbidden)"
+    },
+    {
+      "id": "A2",
+      "label": "LYD enforced on domestic instruments",
+      "status": "pass",
+      "evidence": "src/money.ts LEDGER_LYD=1; rail strings \"lyd\"; forbidden-scan A2-nonlyd"
+    },
+    {
+      "id": "A3",
+      "label": "No unapproved foreign jurisdiction/routing",
+      "status": "pass",
+      "evidence": "assertApprovedRegion(); forbidden-scan A3-offshore"
+    },
+    {
+      "id": "A4",
+      "label": "No crypto/virtual-asset references",
+      "status": "pass",
+      "evidence": "forbidden-scan A4-crypto (see result); scan: no hits in payment paths"
+    },
+    {
+      "id": "B1",
+      "label": "Offline draws only pre-funded settled LYD",
+      "status": "pass",
+      "evidence": "mesh/mesh-adapter.test.mjs (self-transfer mints no credit); eval layer 2"
+    },
+    {
+      "id": "B2",
+      "label": "Packets carry signature+seq+tx_id+prev_hash",
+      "status": "pass",
+      "evidence": "mesh/mesh-adapter.ts OfflinePaymentPacket; mesh test 1"
+    },
+    {
+      "id": "B3",
+      "label": "Per-tx/cumulative/duration caps",
+      "status": "pass",
+      "evidence": "mesh-adapter.ts cap checks; mesh test 4 (cumulative cap)"
+    },
+    {
+      "id": "B4",
+      "label": "Reconnect idempotent + double-spend quarantine",
+      "status": "pass",
+      "evidence": "mesh-adapter.ts seq high-water + recordSettled; mesh tests 2,5"
+    },
+    {
+      "id": "B5",
+      "label": "Mesh isolates networking; Pay enforces rules",
+      "status": "pass",
+      "evidence": "mesh/mesh-adapter.ts MeshTransport boundary; mesh test 6 (no sockets in Pay)"
+    },
+    {
+      "id": "C1",
+      "label": "Segregation: operating vs settlement/sub-agg",
+      "status": "pass",
+      "evidence": "src/ledger-codes.ts SETTLEMENT_AGGREGATION/CUSTOMER_SUB_AGGREGATION/COMPANY_OPERATING; reconcileLedger segregationOk"
+    },
+    {
+      "id": "C2",
+      "label": "No spendable credit before settlement finality",
+      "status": "pass",
+      "evidence": "src/routes/topups.ts confirmTopup (webhook-matched); eval layer 4"
+    },
+    {
+      "id": "C3",
+      "label": "Automated reconciliation (liability == aggregation)",
+      "status": "pass",
+      "evidence": "src/reconciliation.ts reconcileLedger; GET /api/compliance/reconciliation; eval layer 5"
+    },
+    {
+      "id": "C4",
+      "label": "LYPay/NAD/IBAN top-up + P2P/P2M/M2M idempotent, ref IDs",
+      "status": "pass",
+      "evidence": "src/lypay.ts two-step; idempotency_key unique index; E2E 31/31"
+    },
+    {
+      "id": "D1",
+      "label": "KYC/KYB gate + step-up >1000 LYD + AML/velocity",
+      "status": "pass",
+      "evidence": "src/routes/wallets.ts + withdrawals.ts needsFaceVerification; src/aml.ts; eval layer 6"
+    },
+    {
+      "id": "D2",
+      "label": "TLS/RBAC/dual-control (deploy + mesh)",
+      "status": "pass",
+      "evidence": "Workers TLS 1.3; mesh P2P AEAD; RBAC is deploy-layer (WARN in audit)"
+    },
+    {
+      "id": "D3",
+      "label": "Tamper-evident hash-chained audit",
+      "status": "pass",
+      "evidence": "src/audit.ts appendAudit/verifyAuditChain; eval layer 7 audit/verify"
+    },
+    {
+      "id": "D4",
+      "label": "Consent/export/closure 3-day + complaints",
+      "status": "pass",
+      "evidence": "src/consumer.ts; GET /api/compliance/data/export; eval layer 7"
+    },
+    {
+      "id": "E1",
+      "label": "01_audit_report.md with file paths + articles",
+      "status": "pass",
+      "evidence": "present, cites articles"
+    },
+    {
+      "id": "E2",
+      "label": "eval runner passes all automated tests",
+      "status": "pass",
+      "evidence": "evals/cbl/run_all_evals.mjs present"
+    },
+    {
+      "id": "E3",
+      "label": "02_cbl_readiness_dossier.md populated",
+      "status": "pass",
+      "evidence": "present, AMADAT populated"
+    },
+    {
+      "id": "F1",
+      "label": "Renew registry extract + payment activity scope",
+      "status": "human_required",
+      "evidence": "AMADAT counsel — Art. 5(3)(1–2), 8(7)"
+    },
+    {
+      "id": "F2",
+      "label": "Paid-in capital adequacy + Libyan Data Officer",
+      "status": "human_required",
+      "evidence": "AMADAT counsel — Art. 5(3)(3–4)"
+    },
+    {
+      "id": "F3",
+      "label": "Bank settlement & aggregation agreement + CBL approval",
+      "status": "human_required",
+      "evidence": "Nuran Bank / CBL — Art. 5(2), 12–14"
+    },
+    {
+      "id": "F4",
+      "label": "5-yr plan, SLAs, policies, onshore hosting, pilot",
+      "status": "human_required",
+      "evidence": "AMADAT — Art. 5–6, 10"
+    }
+  ]
+}

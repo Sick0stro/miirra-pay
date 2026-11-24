@@ -198,6 +198,22 @@ async function main() {
       meshOk, meshOk ? undefined : meshOut.split('\n').slice(-6).join(' '));
   }
 
+  // ── Layer 9: Checklist bindings A1–E3 + forbidden-content guard ────────────
+  section('9. Checklist bindings A1–E3 + forbidden-content guard (Art. 2–28)');
+  {
+    const { execFileSync } = await import('node:child_process');
+    let bindOut = '';
+    let bindOk = false;
+    try {
+      bindOut = execFileSync('node', ['evals/cbl/checklist_bindings.mjs'], { cwd: process.cwd(), encoding: 'utf8', timeout: 30000 });
+      bindOk = /CODE CHECKS GREEN|Code checks: \d+\/\d+ pass/.test(bindOut) && !/FAILED:/.test(bindOut);
+    } catch (e) {
+      bindOut = (e && e.stdout ? e.stdout : '') + (e && e.stderr ? e.stderr : '');
+    }
+    ok('all A1–E3 code checks bound + no forbidden content', bindOk,
+      bindOk ? undefined : bindOut.split('\n').filter((l) => /✗|FAILED|hit\(s\)/.test(l)).join(' ').slice(0, 400));
+  }
+
   // ── summary ───────────────────────────────────────────────────────────────
   out(`\n${'─'.repeat(48)}`);
   out(`RESULT: ${pass} passed, ${fail} failed`);
