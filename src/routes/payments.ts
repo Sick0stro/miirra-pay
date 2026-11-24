@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+﻿import { Hono } from 'hono';
 import { z } from 'zod';
 import { sql } from 'drizzle-orm';
 
@@ -7,8 +7,10 @@ import type { AppEnv } from '../env';
 import { badRequest, conflict, notFound } from '../errors';
 import { getDb } from '../db';
 import { LedgerService, LedgerCode } from '../ledger-service';
+import { type TbTransfer } from '../ledger';
 import { SYSTEM, idStr } from '../ledger-codes';
-import { createLedgerClient, type TbTransfer } from '../ledger';
+import { ledgerFromEnv, railLimitsFromEnv } from '../runtime';
+import { withinPerTransferCap, lydToRailString } from '../money';
 import { lypayFromEnv, type LypayTransaction } from '../lypay';
 import { internalMerchantReference, uuid } from '../ids';
 import { parse } from '../validate';
@@ -80,15 +82,6 @@ const RefundSchema = z.object({
 
 export const paymentsRoute = new Hono<AppEnv>();
 
-function ledgerConfig(env: AppEnv['Bindings']) {
-  const useHttp = env.LEDGER_MODE === 'http' || !!env.LEDGER_BRIDGE_URL;
-  return {
-    baseUrl: env.LEDGER_BRIDGE_URL ?? 'http://127.0.0.1:8788',
-    token: env.LEDGER_BRIDGE_TOKEN ?? '',
-    mode: (useHttp ? 'http' : 'mock') as 'http' | 'mock',
-  };
-}
-
 function statusFromLypay(t: LypayTransaction): 'acknowledged' | 'processing' | 'completed' | 'declined' {
   switch (t.status.name) {
     case 'completed':
@@ -118,8 +111,17 @@ paymentsRoute.post('/initiate', requireAuth, async (c) => {
     return c.json({ id: r.id, status: r.status, lypayUuid: r.lypay_uuid, replayed: true });
   }
 
-  const ledger = new LedgerService(createLedgerClient(ledgerConfig(c.env)));
+  const ledger = ledgerFromEnv(c.env);
   const txId = uuid();
+
+  // Rail cap: reject a single transfer above the configured per-transfer limit
+  // BEFORE touching the ledger or the rail. (The face-verification gate for
+  // amounts above FACE_VERIFY_THRESHOLD_MINOR is enforced in the wallet flow,
+  // where a user moves their own balance; bank-rail P2P/P2M/M2M settlement is
+  // capped here.)
+  if (!withinPerTransferCap(body.amountMinor, railLimitsFromEnv(c.env))) {
+    throw badRequest(`Amount exceeds per-transfer rail limit`, 'exceeds_rail_limit');
+  }
 
   // The payer's TigerBeetle account is keyed on the authenticated user — you can
   // only ever debit your OWN account. A user can never name someone else's
@@ -178,7 +180,7 @@ paymentsRoute.post('/initiate', requireAuth, async (c) => {
     txn = await lypay.initiate({
       transactionType: body.transactionType,
       initiation: {
-        amount: { amount: String(body.amountMinor), currency: 'lyd' },
+        amount: { amount: lydToRailString(body.amountMinor), currency: 'lyd' },
         debtorAccount: { schemeName: body.sender.schemeName, identification: body.sender.identification, name: body.sender.name },
         creditorAccount: { schemeName: body.receiver.schemeName, identification: body.receiver.identification, name: body.receiver.name },
         creditorInstitution: body.creditorInstitution,
@@ -213,7 +215,7 @@ paymentsRoute.post('/initiate', requireAuth, async (c) => {
 paymentsRoute.post('/confirm', requireAuth, async (c) => {
   const body = parse(ConfirmSchema, await c.req.json());
   const db = getDb(c.env.DATABASE_URL);
-  const ledger = new LedgerService(createLedgerClient(ledgerConfig(c.env)));
+  const ledger = ledgerFromEnv(c.env);
 
   const rows = await db.execute(sql`
     SELECT id, lypay_uuid, payment_reference, transaction_timestamp, status, tb_ledger_phase
@@ -278,7 +280,7 @@ paymentsRoute.post('/refund', requireAuth, async (c) => {
   const body = parse(RefundSchema, await c.req.json());
   const user = userOf(c);
   const db = getDb(c.env.DATABASE_URL);
-  const ledger = new LedgerService(createLedgerClient(ledgerConfig(c.env)));
+  const ledger = ledgerFromEnv(c.env);
   const now = Date.now();
 
   const idem = `refund:${body.idempotencyKey}`;
@@ -325,7 +327,7 @@ paymentsRoute.post('/refund', requireAuth, async (c) => {
     txn = await lypay.refund(tx.lypay_uuid, {
       payment_reference: tx.payment_reference!,
       transaction_timestamp: tx.transaction_timestamp ?? '',
-      amount: String(body.amountMinor),
+      amount: lydToRailString(body.amountMinor),
       description: body.description,
     });
   } catch (err) {

@@ -37,6 +37,14 @@ export type AppEnv = {
      * zero external dependencies, exactly like DEMO_MODE elsewhere.
      */
     LEDGER_MODE?: 'http' | 'mock';
+    /** Pending-transfer timeout in seconds (auto-expire abandoned reservations). */
+    LEDGER_PENDING_TIMEOUT_SECONDS?: string;
+
+    // ── Rail limits (minor units; override the defaults in money.ts) ───────
+    /** Max single transfer, minor units. */
+    RAIL_PER_TRANSFER_MINOR?: string;
+    /** Max cumulative outflow per user per rolling 24h, minor units. */
+    RAIL_DAILY_MINOR?: string;
 
     /** This institution's receiving IBAN / NAD alias shown for top-ups. */
     PLATFORM_RECEIVING_IBAN?: string;
@@ -45,6 +53,16 @@ export type AppEnv = {
 
     /** 0/1 switch: when '1', payments run fully against the mock LYPay. */
     PAYMENTS_MOCK?: string;
+
+    // ── Didit (KYC / face verification) — server-side only ─────────────────
+    /** Didit API key (X-Api-Key). Server-side only — never sent to a client. */
+    DIDIT_API_KEY?: string;
+    /** Didit API base (default https://apx.didit.me). */
+    DIDIT_BASE_URL?: string;
+    /** HMAC secret for verifying inbound Didit webhooks. */
+    DIDIT_WEBHOOK_SECRET?: string;
+    /** Default Didit workflow id (KYC/KYB) used when a request omits workflowId. */
+    DIDIT_WORKFLOW_ID?: string;
   };
   Variables: {
     auth: AuthUser;

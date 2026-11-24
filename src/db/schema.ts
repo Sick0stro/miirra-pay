@@ -20,6 +20,7 @@ import {
   boolean,
   index,
   integer,
+  numeric,
   pgSchema,
   pgTable,
   text,
@@ -342,4 +343,105 @@ export const lypayCallLog = schema.table(
     at: bigint('at', { mode: 'number' }).notNull(),
   },
   (t) => [index('lypay_call_op_idx').on(t.operation, t.at)],
+);
+
+// ── Vendor / branch verifications (Didit KYC/KYB) ────────────────────────────
+// One row per Didit verification session, linked to the vendor/branch (and
+// optionally the import record) it onboards. Tracks the session id, the full
+// vendor_data echo, the lifecycle status, and the face-match score. Webhook
+// events are deduplicated by `didit_event_id` before any mutation, and an
+// already-`approved` row is never downgraded.
+
+export const vendorVerifications = schema.table(
+  'vendor_verifications',
+  {
+    id: uuid('id').primaryKey(),
+    /** The vendor / branch this verification onboards. */
+    vendorId: text('vendor_id').notNull(),
+    /** Optional branch within the vendor (multi-branch merchants). */
+    branchId: text('branch_id'),
+    /** Optional import record that introduced this vendor. */
+    importRecordId: text('import_record_id'),
+    /** Didit session UUID. */
+    diditSessionId: text('didit_session_id').notNull(),
+    /** The vendor_data we sent (our stable id for the entity). */
+    vendorData: text('vendor_data').notNull(),
+    /** Echo of the Didit metadata (JSON). */
+    vendorData_raw: text('vendor_data_raw'),
+    /** pending | started | approved | declined | expired | failed */
+    status: text('status')
+      .$type<'pending' | 'started' | 'approved' | 'declined' | 'expired' | 'failed'>()
+      .notNull()
+      .default('pending'),
+    /** Didit document_type from the decision (e.g. 'ID', 'P', 'DL'). */
+    documentType: text('document_type'),
+    /** Face-match score (0..1) from the decision's face_matches[]. */
+    faceMatchScore: numeric('face_match_score', { precision: 5, scale: 4 }),
+    /** Last Didit event id that touched this row (for dedupe + audit). */
+    lastEventId: text('last_event_id'),
+    /** Set when the session reaches a terminal success state. */
+    verifiedAt: bigint('verified_at', { mode: 'number' }),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('vendor_verifications_didit_session_uq').on(t.diditSessionId),
+    index('vendor_verifications_vendor_idx').on(t.vendorId, t.branchId),
+    index('vendor_verifications_status_idx').on(t.status),
+  ],
+);
+
+// ── Didit webhook event dedupe ────────────────────────────────────────────────
+// Raw inbound Didit events, deduplicated by event_id BEFORE mutating a
+// vendor_verifications row.
+
+export const diditWebhookEvents = schema.table(
+  'didit_webhook_events',
+  {
+    id: uuid('id').primaryKey(),
+    diditEventId: text('didit_event_id').notNull(),
+    webhookType: text('webhook_type').notNull(),
+    sessionId: text('session_id'),
+    status: text('status'),
+    signatureValid: boolean('signature_valid').notNull(),
+    rawBody: text('raw_body').notNull(),
+    /** processed | duplicate | error */
+    result: text('result').notNull().default('pending'),
+    receivedAt: bigint('received_at', { mode: 'number' }).notNull(),
+    processedAt: bigint('processed_at', { mode: 'number' }),
+  },
+  (t) => [
+    uniqueIndex('didit_webhook_event_uq').on(t.diditEventId),
+    index('didit_webhook_session_idx').on(t.sessionId),
+  ],
+);
+
+// ── Notification attempts ─────────────────────────────────────────────────────
+// Best-effort delivery log. A row exists for every notify() attempt so a retry
+// worker can re-drive failures. A notification failure NEVER rolls back a
+// confirmed payment — this table is downstream of the ledger, not part of it.
+
+export const notificationAttempts = schema.table(
+  'notification_attempts',
+  {
+    id: uuid('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    /** wallet_received | payment_confirmed | topup_confirmed */
+    kind: text('kind').notNull(),
+    amountMinor: bigint('amount_minor', { mode: 'number' }).notNull().default(0),
+    body: text('body'),
+    /** Correlation id (transaction id). */
+    correlationId: text('correlation_id'),
+    /** pending | delivered | failed */
+    status: text('status').$type<'pending' | 'delivered' | 'failed'>().notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(1),
+    lastError: text('last_error'),
+    deliveredAt: bigint('delivered_at', { mode: 'number' }),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('notification_attempts_user_idx').on(t.userId),
+    index('notification_attempts_status_idx').on(t.status),
+  ],
 );

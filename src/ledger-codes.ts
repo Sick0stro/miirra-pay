@@ -32,6 +32,8 @@ export const SYSTEM = {
   PLATFORM_REVENUE: 2n,
   /** Sinking fund refunds are paid out of before LYPay re-credits. */
   REFUND_SUSPENSE: 3n,
+  /** Clearing account for outbound withdrawals (Miirra → Bank/LYPay). */
+  WITHDRAWAL_CLEARING: 4n,
 } as const;
 
 /**

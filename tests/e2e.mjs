@@ -149,7 +149,7 @@ async function main() {
     sender: { identification: 'LY3333333333333333', name: 'Biz A' },
     receiver: { identification: 'LY4444444444444444', name: 'Biz B', partyId: randomUuid() },
     creditorInstitution: { name: 'NCI', code: '007' },
-    amountMinor: 1000000,
+    amountMinor: 400000,
     commissionMinor: 10000,
     description: 'Test M2M',
   });
@@ -170,7 +170,7 @@ async function main() {
       payment_reference: m2m.data.paymentReference,
       status: 'completed',
       status_code: '03',
-      amount: { amount: '1000000', currency: 'LYD' },
+      amount: { amount: '400000', currency: 'LYD' },
     },
   });
   ok('M2M webhook completes', statusUpdate.data?.result === 'processed', JSON.stringify(statusUpdate.data));
@@ -223,6 +223,89 @@ async function main() {
     },
   });
   ok('unmatched credit accepted', unmatched.status === 200 && unmatched.data?.result === 'processed', JSON.stringify(unmatched.data));
+
+  // 7. wallet-to-wallet transfer (internal ledger move)
+  console.log('\n7. wallet-to-wallet transfer');
+  const recvUser = `recv-${RUN}`;
+  // Resolve a first-time IBAN (no account) → not onboarded.
+  const resolveUnknown = await call('POST', '/api/wallets/transfer/resolve', { query: 'LY79004400000012345678901' });
+  ok('resolve parses IBAN', resolveUnknown.data?.kind === 'iban', JSON.stringify(resolveUnknown.data));
+  // Wallet transfer below the face-verify threshold (≤ 1000 LYD) — sender is the
+  // dev user, receiver is another user id (treated as a party).
+  const walletTx = await call('POST', '/api/wallets/transfer', {
+    idempotencyKey: `wallet-${RUN}`,
+    receiver: { userId: recvUser, name: 'Receiver' },
+    amountMinor: 50000, // 500 LYD — below threshold
+    feeMinor: 1000,
+  });
+  ok('wallet transfer 201', walletTx.status === 201, `got ${walletTx.status}: ${JSON.stringify(walletTx.data)}`);
+  ok('wallet transfer completed', walletTx.data?.status === 'completed' && walletTx.data?.ledgerPhase === 'posted', JSON.stringify(walletTx.data));
+  // Above threshold without Didit → rejected.
+  const walletBig = await call('POST', '/api/wallets/transfer', {
+    idempotencyKey: `wallet-big-${RUN}`,
+    receiver: { userId: recvUser, name: 'Receiver' },
+    amountMinor: 150000, // 1500 LYD — above threshold
+  });
+  ok('wallet >1000 LYD requires face', walletBig.status === 400 && walletBig.data?.error?.code === 'face_verification_required', JSON.stringify(walletBig.data));
+  // Self-transfer rejected.
+  const walletSelf = await call('POST', '/api/wallets/transfer', {
+    idempotencyKey: `wallet-self-${RUN}`,
+    receiver: { userId: DEV_USER },
+    amountMinor: 1000,
+  });
+  ok('self-transfer rejected', walletSelf.status === 400, JSON.stringify(walletSelf.data));
+  // Duplicate idempotency → replayed.
+  const walletDup = await call('POST', '/api/wallets/transfer', {
+    idempotencyKey: `wallet-${RUN}`,
+    receiver: { userId: recvUser },
+    amountMinor: 50000,
+    feeMinor: 1000,
+  });
+  ok('wallet duplicate replayed', walletDup.data?.replayed === true, JSON.stringify(walletDup.data));
+
+  // 8. withdrawal (wallet → LYPay bank)
+  console.log('\n8. withdrawal');
+  const wd = await call('POST', '/api/withdrawals/initiate', {
+    idempotencyKey: `withdraw-${RUN}`,
+    debtorAccount: { schemeName: 'iban', identification: 'LY79004400000012345678901', name: 'Alice' },
+    creditorInstitution: { name: 'Jumhouria', code: '002' },
+    amountMinor: 50000,
+    feeMinor: 2000,
+    description: 'Test withdrawal',
+  });
+  ok('withdrawal initiate 201', wd.status === 201, `got ${wd.status}: ${JSON.stringify(wd.data)}`);
+  ok('withdrawal has lypay uuid', !!wd.data?.lypayUuid);
+  const wdConfirm = await call('POST', '/api/withdrawals/confirm', { transactionId: wd.data.id });
+  ok('withdrawal confirmed → posted', wdConfirm.data?.status === 'completed' && wdConfirm.data?.ledgerPhase === 'posted', JSON.stringify(wdConfirm.data));
+  // Declined withdrawal → voided hold (set plan on mock server).
+  await fetch('http://127.0.0.1:8799/_test/plan', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ uuid: wd.data.lypayUuid, plan: 'decline' }),
+  });
+  const wd2 = await call('POST', '/api/withdrawals/initiate', {
+    idempotencyKey: `withdraw-decline-${RUN}`,
+    debtorAccount: { schemeName: 'iban', identification: 'LY79004400000012345678901', name: 'Alice' },
+    creditorInstitution: { name: 'Jumhouria', code: '002' },
+    amountMinor: 10000,
+    description: 'Decline test',
+  });
+  // Note: the plan was set on the FIRST uuid; set it on the new one too.
+  await fetch('http://127.0.0.1:8799/_test/plan', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ uuid: wd2.data.lypayUuid, plan: 'decline' }),
+  });
+  const wd2Confirm = await call('POST', '/api/withdrawals/confirm', { transactionId: wd2.data.id });
+  ok('declined withdrawal → voided', wd2Confirm.data?.status === 'declined' && wd2Confirm.data?.ledgerPhase === 'voided', JSON.stringify(wd2Confirm.data));
+
+  // 9. Didit verification (mocked — no real API key, expect a clean error)
+  console.log('\n9. Didit verification');
+  const diditSession = await call('POST', '/api/verifications/didit/session', {
+    vendorId: `vendor-${RUN}`,
+    branchId: 'main',
+  });
+  // Without a configured workflow/key this returns a clean 400 (no_workflow);
+  // the important thing is the route exists and fails closed, not 500.
+  ok('didit session route responds', diditSession.status === 400 || diditSession.status === 201, `got ${diditSession.status}: ${JSON.stringify(diditSession.data)}`);
 
   console.log(`\n${'─'.repeat(48)}`);
   console.log(`RESULT: ${pass} passed, ${fail} failed`);

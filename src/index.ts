@@ -9,6 +9,11 @@ import { userOf } from './auth';
 import { paymentsRoute } from './routes/payments';
 import { topupsRoute } from './routes/topups';
 import { webhooksRoute } from './routes/webhooks';
+import { verificationsRoute } from './routes/verifications';
+import { diditWebhooksRoute } from './routes/didit-webhooks';
+import { walletsRoute } from './routes/wallets';
+import { withdrawalsRoute } from './routes/withdrawals';
+import { healthRoute } from './routes/health';
 
 /**
  * Miirra Pay — the LYD payments worker.
@@ -47,7 +52,8 @@ app.onError((err, c) => {
   return c.json({ error: { code: 'internal', message: 'Internal error' } }, 500);
 });
 
-app.get('/health', (c) => c.json({ ok: true, service: 'miirra-pay', ts: Date.now() }));
+// Dependency-aware health (NeonDB + TigerBeetle bridge), no secret exposure.
+app.route('/', healthRoute);
 
 // Who am I — proves the auth path works and gives the client its user id.
 app.get('/v1/me', requireAuth, (c) => {
@@ -55,12 +61,16 @@ app.get('/v1/me', requireAuth, (c) => {
   return c.json({ id: u.id, email: u.email, name: u.name });
 });
 
-// The webhook route is mounted at the TOP level (not under /api) because LYPay
-// calls the exact path it was configured with; /webhooks/lypay is conventional.
-app.route('/webhooks', webhooksRoute);
+// The webhook routes are mounted at the TOP level (not under /api) because the
+// providers call the exact path they were configured with.
+app.route('/webhooks', webhooksRoute); // LYPay (CBL)
+app.route('/webhooks', diditWebhooksRoute); // Didit (KYC/KYB) → /webhooks/didit
 
 // API routes.
 app.route('/api/topups', topupsRoute);
 app.route('/api/payments', paymentsRoute);
+app.route('/api/verifications', verificationsRoute);
+app.route('/api/wallets', walletsRoute);
+app.route('/api/withdrawals', withdrawalsRoute);
 
 export default app;
