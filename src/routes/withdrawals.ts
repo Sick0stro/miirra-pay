@@ -8,6 +8,8 @@ import { badRequest, conflict, forbidden, notFound } from '../errors';
 import { getDb } from '../db';
 import { ledgerFromEnv, railLimitsFromEnv } from '../runtime';
 import { needsFaceVerification, withinPerTransferCap, formatLyd, lydToRailString } from '../money';
+import { requireCblPerimeter } from '../cbl-perimeter';
+import { appendAudit } from '../audit';
 import { lypayFromEnv, type LypayTransaction } from '../lypay';
 import { uuid } from '../ids';
 import { parse } from '../validate';
@@ -83,6 +85,9 @@ withdrawalsRoute.post('/initiate', requireAuth, async (c) => {
     const r = existing.rows[0] as { id: string; status: string; lypay_uuid: string | null };
     return c.json({ id: r.id, status: r.status, lypayUuid: r.lypay_uuid, replayed: true });
   }
+
+  // CBL perimeter: license/sandbox gate (Art. 2/7).
+  requireCblPerimeter({ env: c.env as never, userId: user.id });
 
   // ── FOR UPDATE transaction: balance + limits + face gate ──────────────────
   // The Neon HTTP driver runs each db.execute as its own implicit transaction,
@@ -219,6 +224,12 @@ withdrawalsRoute.post('/confirm', requireAuth, async (c) => {
       WHERE id = ${tx.id}
     `);
     await recordTransition(db, tx.id, 'completed', 'withdraw_confirm', txn.paymentReference, now);
+    await appendAudit(db, {
+      actor: 'system',
+      action: 'withdrawal.completed',
+      entity: 'withdrawal',
+      entityId: tx.id,
+    });
     return c.json({ id: tx.id, status: 'completed', ledgerPhase: 'posted' });
   }
 

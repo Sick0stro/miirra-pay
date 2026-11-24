@@ -55,6 +55,9 @@ export const LedgerCode = {
   PLATFORM_REVENUE: 11,
   REFUND_SUSPENSE: 12,
   WITHDRAWAL_CLEARING: 13,
+  SETTLEMENT_AGGREGATION: 14,
+  CUSTOMER_SUB_AGGREGATION: 15,
+  COMPANY_OPERATING: 16,
   /** Transfer codes. */
   TX_PRINCIPAL: 1000,
   TX_COMMISSION: 1001,
@@ -123,6 +126,9 @@ export class LedgerService {
       { id: SYSTEM.PLATFORM_REVENUE, code: LedgerCode.PLATFORM_REVENUE },
       { id: SYSTEM.REFUND_SUSPENSE, code: LedgerCode.REFUND_SUSPENSE },
       { id: SYSTEM.WITHDRAWAL_CLEARING, code: LedgerCode.WITHDRAWAL_CLEARING },
+      { id: SYSTEM.SETTLEMENT_AGGREGATION, code: LedgerCode.SETTLEMENT_AGGREGATION },
+      { id: SYSTEM.CUSTOMER_SUB_AGGREGATION, code: LedgerCode.CUSTOMER_SUB_AGGREGATION },
+      { id: SYSTEM.COMPANY_OPERATING, code: LedgerCode.COMPANY_OPERATING },
     ];
     await this.tb.createAccounts(
       defs.map((d) => ({

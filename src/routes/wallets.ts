@@ -9,6 +9,9 @@ import { getDb } from '../db';
 import { ledgerFromEnv, railLimitsFromEnv } from '../runtime';
 import { needsFaceVerification, withinPerTransferCap, formatLyd } from '../money';
 import { notify } from '../notifications';
+import { requireCblPerimeter } from '../cbl-perimeter';
+import { screen as amlScreen } from '../aml';
+import { appendAudit } from '../audit';
 import { uuid } from '../ids';
 import { parse } from '../validate';
 
@@ -162,6 +165,9 @@ walletsRoute.post('/transfer', requireAuth, async (c) => {
     return c.json({ id: r.id, status: r.status, replayed: true });
   }
 
+  // CBL perimeter: license/sandbox gate (Art. 2/7). Unlicensed → refused.
+  requireCblPerimeter({ env: c.env as never, userId: user.id });
+
   // Resolve the receiver to a platform user id (and their tb account).
   let receiverUserId = body.receiver.userId;
   let receiverName = body.receiver.name ?? null;
@@ -242,6 +248,26 @@ walletsRoute.post('/transfer', requireAuth, async (c) => {
     }
   }
 
+  // AML / fraud screen (Art. 9(8)). High-severity flags block the transfer
+  // pending review; medium/low are logged to the audit trail.
+  const aml = await amlScreen({
+    db,
+    userId: user.id,
+    amountMinor: body.amountMinor,
+    perTransferCapMinor: limits.perTransferMinor,
+    dailyCapMinor: limits.dailyMinor,
+  });
+  if (aml.block) {
+    await appendAudit(db, {
+      actor: user.id,
+      action: 'wallet.transfer.blocked_aml',
+      entity: 'wallet_transfer',
+      amountMinor: body.amountMinor,
+      detail: JSON.stringify(aml.flags),
+    });
+    throw forbidden('Transfer blocked pending AML review');
+  }
+
   // Ensure both accounts exist.
   const ledger = ledgerFromEnv(c.env);
   const senderAccount = await ledger.ensureAccount('user', user.id);
@@ -298,6 +324,16 @@ walletsRoute.post('/transfer', requireAuth, async (c) => {
     amountMinor: body.amountMinor,
     body: `You received ${formatLyd(body.amountMinor)} from ${user.name ?? 'a Miirra user'}`,
     correlationId: txId,
+  });
+
+  // Tamper-evident audit entry (Art. 27).
+  await appendAudit(db, {
+    actor: user.id,
+    action: 'wallet.transfer.completed',
+    entity: 'wallet_transfer',
+    entityId: txId,
+    amountMinor: body.amountMinor,
+    detail: JSON.stringify({ receiver: receiverUserId, feeMinor: body.feeMinor, amlFlags: aml.flags.length }),
   });
 
   return c.json(

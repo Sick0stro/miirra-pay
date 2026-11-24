@@ -63,6 +63,16 @@ export type AppEnv = {
     DIDIT_WEBHOOK_SECRET?: string;
     /** Default Didit workflow id (KYC/KYB) used when a request omits workflowId. */
     DIDIT_WORKFLOW_ID?: string;
+
+    // ── CBL regulatory perimeter (server-side) ─────────────────────────────
+    /** '1' when a CBL license is active (licensed live operation). */
+    CBL_LICENSE_ACTIVE?: string;
+    /** '1' to run in the CBL sandbox (pilot cohort only). */
+    CBL_SANDBOX_MODE?: string;
+    /** Comma-separated user ids allowed to transact in sandbox mode. */
+    CBL_SANDBOX_USER_IDS?: string;
+    /** The CBL-approved Libya region (e.g. 'ly-tripoli'); refuses off-shore. */
+    CBL_APPROVED_REGION?: string;
   };
   Variables: {
     auth: AuthUser;

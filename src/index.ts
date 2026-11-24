@@ -13,6 +13,7 @@ import { verificationsRoute } from './routes/verifications';
 import { diditWebhooksRoute } from './routes/didit-webhooks';
 import { walletsRoute } from './routes/wallets';
 import { withdrawalsRoute } from './routes/withdrawals';
+import { complianceRoute } from './routes/compliance';
 import { healthRoute } from './routes/health';
 
 /**
@@ -72,5 +73,6 @@ app.route('/api/payments', paymentsRoute);
 app.route('/api/verifications', verificationsRoute);
 app.route('/api/wallets', walletsRoute);
 app.route('/api/withdrawals', withdrawalsRoute);
+app.route('/api/compliance', complianceRoute);
 
 export default app;

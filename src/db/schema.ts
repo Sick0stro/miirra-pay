@@ -445,3 +445,83 @@ export const notificationAttempts = schema.table(
     index('notification_attempts_status_idx').on(t.status),
   ],
 );
+
+// ── Tamper-evident audit log (Art. 27) ────────────────────────────────────────
+// Append-only, hash-chained. Each row stores a hash over (prev_hash || this
+// row's canonical fields), so any tampering with an earlier row breaks every
+// subsequent hash — verification detects it. Never updated or deleted.
+
+export const auditLog = schema.table(
+  'audit_log',
+  {
+    id: uuid('id').primaryKey(),
+    /** Monotonic sequence for ordering + chain linkage. */
+    seq: bigint('seq', { mode: 'number' }).notNull(),
+    /** actor (user id or 'system'), action, entity, entity_id, amount_minor. */
+    actor: text('actor').notNull(),
+    action: text('action').notNull(),
+    entity: text('entity'),
+    entityId: text('entity_id'),
+    amountMinor: bigint('amount_minor', { mode: 'number' }).notNull().default(0),
+    currency: text('currency').notNull().default('LYD'),
+    /** Free-text detail / metadata (JSON string). */
+    detail: text('detail'),
+    /** SHA-256 hex of (prev_hash || canonical(this row)). */
+    hash: text('hash').notNull(),
+    /** The previous row's hash (genesis = 64 zeros). */
+    prevHash: text('prev_hash').notNull(),
+    at: bigint('at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('audit_log_seq_uq').on(t.seq),
+    index('audit_log_actor_idx').on(t.actor),
+    index('audit_log_entity_idx').on(t.entity, t.entityId),
+  ],
+);
+
+// ── Consumer lifecycle (Art. 26, 28) ─────────────────────────────────────────
+// Complaints + account-closure SLA tracking. Closure must complete within
+// 3 business days (Art. 26(4)).
+
+export const consumerCases = schema.table(
+  'consumer_cases',
+  {
+    id: uuid('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    /** complaint | closure | dispute */
+    kind: text('kind').$type<'complaint' | 'closure' | 'dispute'>().notNull(),
+    /** open | in_progress | resolved | closed | rejected */
+    status: text('status').$type<'open' | 'in_progress' | 'resolved' | 'closed' | 'rejected'>().notNull().default('open'),
+    subject: text('subject').notNull(),
+    detail: text('detail'),
+    /** For closure cases: the SLA deadline (ms). */
+    slaDueAt: bigint('sla_due_at', { mode: 'number' }),
+    resolvedAt: bigint('resolved_at', { mode: 'number' }),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('consumer_cases_user_idx').on(t.userId),
+    index('consumer_cases_status_idx').on(t.status),
+    index('consumer_cases_sla_idx').on(t.slaDueAt),
+  ],
+);
+
+// ── Consent ledger (2026 PDPR) ────────────────────────────────────────────────
+// Explicit opt-in consent records + data export/deletion (DSAR) tracking.
+
+export const consentRecords = schema.table(
+  'consent_records',
+  {
+    id: uuid('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    /** terms | privacy | biometrics | marketing */
+    purpose: text('purpose').notNull(),
+    /** granted | withdrawn */
+    state: text('state').$type<'granted' | 'withdrawn'>().notNull(),
+    /** Version of the text the user agreed to. */
+    textVersion: text('text_version'),
+    recordedAt: bigint('recorded_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [index('consent_records_user_idx').on(t.userId, t.purpose)],
+);

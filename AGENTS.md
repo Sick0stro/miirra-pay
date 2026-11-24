@@ -123,3 +123,33 @@ Retries are safe: a re-posted pending returns `exists` /
 - internalMerchantReference (P2M): `[INST 3][TIMESTAMP 10][REF 8 alnum]`.
 - Refund body keys are snake_case (`payment_reference`, `transaction_timestamp`);
   confirm body keys are camelCase (`paymentReference`, `transactionTimestamp`).
+## CBL compliance layer (2026-11-24)
+
+Regulatory guardrails against the CBL Electronic Payment Services Regulation
+(March 2020) + Circular 9/2026 + 2026 PDPR:
+
+- `src/cbl-perimeter.ts` — `requireCblPerimeter()` gates all real-money movement
+  behind `CBL_LICENSE_ACTIVE` (licensed) or `CBL_SANDBOX_MODE` (pilot cohort,
+  allow-listed via `CBL_SANDBOX_USER_IDS`). Unlicensed → `forbidden`.
+  `assertDomesticCurrency()` (LYD-only) + `assertApprovedRegion()` (onshore).
+- `src/ledger-codes.ts` — system accounts now include the CBL tier:
+  `SETTLEMENT_AGGREGATION` (حساب التسوية), `CUSTOMER_SUB_AGGREGATION`,
+  `COMPANY_OPERATING` — strict segregation (Art. 12–15).
+- `src/reconciliation.ts` — `reconcileLedger()` asserts 1:1 backing
+  (`sum(wallets) == settlement`) + segregation. `GET /api/compliance/reconciliation`.
+- `src/audit.ts` — hash-chained tamper-evident audit log (`appendAudit` /
+  `verifyAuditChain`). `GET /api/compliance/audit/verify`.
+- `src/aml.ts` — `screen()` flags structuring/velocity + pluggable sanctions hook;
+  high-severity blocks the transfer (Art. 9(8)).
+- `src/consumer.ts` — complaints, 3-business-day closure SLA (`addBusinessDays`),
+  consent ledger, DSAR export/erasure (Art. 26, 28; PDPR).
+
+Routes: `/api/compliance/{complaints, account/closure, consent, data/export,
+data/erasure, audit/verify, reconciliation}`.
+
+Eval harness: `node evals/cbl/run_all_evals.mjs` → 17/17 across 7 layers.
+Audit: `evals/cbl/01_audit_report.md`. Dossier: `evals/cbl/02_cbl_readiness_dossier.md`.
+
+Dev/E2E set `CBL_SANDBOX_MODE=1` + `CBL_SANDBOX_USER_IDS=e2e-user` in
+`.dev.vars`. Production MUST set `CBL_LICENSE_ACTIVE=1` (or the sandbox cohort)
+and migrate Neon onshore.

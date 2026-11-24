@@ -34,6 +34,33 @@ export const SYSTEM = {
   REFUND_SUSPENSE: 3n,
   /** Clearing account for outbound withdrawals (Miirra → Bank/LYPay). */
   WITHDRAWAL_CLEARING: 4n,
+  /**
+   * Main settlement aggregation account (حساب التسوية) — Art. 12(2)/15(1).
+   * Holds 100% of active customer e-money liabilities, ring-fenced from
+   * company creditors. Customer balances sum to THIS account's balance (1:1).
+   */
+  SETTLEMENT_AGGREGATION: 5n,
+  /**
+   * Customer sub-aggregation holding account (Art. 12(1)/13(1)). Reachable
+   * only by sweeping from PLATFORM_CLEARING; the per-user wallets are the
+   * sub-ledger that rolls up to SETTLEMENT_AGGREGATION.
+   */
+  CUSTOMER_SUB_AGGREGATION: 6n,
+  /** Company operating account — fees only, NEVER commingled with customer funds (Art. 12(1)). */
+  COMPANY_OPERATING: 7n,
+} as const;
+
+/**
+ * Account tier for the CBL segregation model (Art. 12–15). Used by
+ * reconciliation to prove customer funds are segregated from operating funds.
+ */
+export const AccountTier = {
+  CUSTOMER_LIABILITY: 'customer_liability', // user wallets
+  SETTLEMENT: 'settlement', // SETTLEMENT_AGGREGATION
+  SUB_AGGREGATION: 'sub_aggregation', // CUSTOMER_SUB_AGGREGATION
+  OPERATING: 'operating', // COMPANY_OPERATING
+  REVENUE: 'revenue', // PLATFORM_REVENUE / fees
+  CLEARING: 'clearing', // PLATFORM_CLEARING / WITHDRAWAL_CLEARING
 } as const;
 
 /**
