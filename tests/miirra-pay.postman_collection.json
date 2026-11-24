@@ -1,0 +1,166 @@
+{
+  "info": {
+    "name": "Miirra Pay — E2E (LYPay + Wallet + Withdrawal + Didit)",
+    "description": "End-to-end requests for the Miirra Pay service. Run against `wrangler dev --port 8791` with the mock LYPay server on :8799 and AUTH_DEV_MODE=1. The collection has a pre-request script that HMAC-signs LYPay webhooks and a helper to set the mock LYPay confirm plan.\n\nVariables: base_url (default http://127.0.0.1:8791), dev_user (x-dev-user header), webhook_secret (mock-webhook-secret), mock_lypay (http://127.0.0.1:8799).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8791" },
+    { "key": "mock_lypay", "value": "http://127.0.0.1:8799" },
+    { "key": "dev_user", "value": "e2e-user" },
+    { "key": "webhook_secret", "value": "mock-webhook-secret" },
+    { "key": "run_id", "value": "RUNID" }
+  ],
+  "item": [
+    {
+      "name": "0. Health",
+      "request": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] } }
+    },
+    {
+      "name": "1. Top-Up",
+      "item": [
+        {
+          "name": "initiate",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-dev-user", "value": "{{dev_user}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"idempotencyKey\": \"topup-{{run_id}}\",\n  \"amountMinor\": 500000\n}" },
+            "url": { "raw": "{{base_url}}/api/topups/initiate", "host": ["{{base_url}}"], "path": ["api", "topups", "initiate"] }
+          }
+        },
+        {
+          "name": "credit webhook (HMAC signed)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// HMAC-sign the webhook body with the shared secret.",
+                  "const CryptoJS = require('crypto-js');",
+                  "const body = JSON.stringify({",
+                  "  webhook: 'transaction_credit_notice',",
+                  "  data: {",
+                  "    amount: { amount: '500000', currency: 'LYD', fees: '0' },",
+                  "    reference: pm.collectionVariables.get('deposit_ref') || 'REPLACE_WITH_REF',",
+                  "    payment_reference: 'CR-' + pm.collectionVariables.get('run_id')",
+                  "  }",
+                  "});",
+                  "const sig = CryptoJS.HmacSHA256(body, pm.collectionVariables.get('webhook_secret')).toString(CryptoJS.enc.Hex);",
+                  "pm.request.headers.add({ key: 'X-LYPay-Signature', value: sig });",
+                  "pm.request.body.raw = body;"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "content-type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": { "raw": "{{base_url}}/webhooks/lypay", "host": ["{{base_url}}"], "path": ["webhooks", "lypay"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Payments",
+      "item": [
+        {
+          "name": "P2M initiate",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-dev-user", "value": "{{dev_user}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"transactionType\": \"P2M\",\n  \"idempotencyKey\": \"p2m-{{run_id}}\",\n  \"sender\": { \"schemeName\": \"iban\", \"identification\": \"LY1111111111111111\", \"name\": \"Alice\" },\n  \"receiver\": { \"schemeName\": \"iban\", \"identification\": \"LY2222222222222222\", \"name\": \"Merchant\" },\n  \"creditorInstitution\": { \"name\": \"Jumhouria\", \"code\": \"002\" },\n  \"amountMinor\": 250000,\n  \"commissionMinor\": 5000,\n  \"description\": \"Test P2M\"\n}" },
+            "url": { "raw": "{{base_url}}/api/payments/initiate", "host": ["{{base_url}}"], "path": ["api", "payments", "initiate"] }
+          }
+        },
+        {
+          "name": "confirm",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-dev-user", "value": "{{dev_user}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"transactionId\": \"REPLACE_WITH_TX_ID\"\n}" },
+            "url": { "raw": "{{base_url}}/api/payments/confirm", "host": ["{{base_url}}"], "path": ["api", "payments", "confirm"] }
+          }
+        },
+        {
+          "name": "refund (M2P)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-dev-user", "value": "{{dev_user}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"transactionId\": \"REPLACE_WITH_COMPLETED_TX_ID\",\n  \"amountMinor\": 100000,\n  \"description\": \"Customer requested\",\n  \"idempotencyKey\": \"refund-{{run_id}}\"\n}" },
+            "url": { "raw": "{{base_url}}/api/payments/refund", "host": ["{{base_url}}"], "path": ["api", "payments", "refund"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Wallet-to-Wallet",
+      "item": [
+        {
+          "name": "resolve (IBAN/QR/phone)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-dev-user", "value": "{{dev_user}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"query\": \"LY79004400000012345678901\"\n}" },
+            "url": { "raw": "{{base_url}}/api/wallets/transfer/resolve", "host": ["{{base_url}}"], "path": ["api", "wallets", "transfer", "resolve"] }
+          }
+        },
+        {
+          "name": "transfer (≤ 1000 LYD, no face)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-dev-user", "value": "{{dev_user}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"idempotencyKey\": \"wallet-{{run_id}}\",\n  \"receiver\": { \"userId\": \"RECEIVER_USER_ID\", \"name\": \"Receiver\" },\n  \"amountMinor\": 50000,\n  \"feeMinor\": 1000\n}" },
+            "url": { "raw": "{{base_url}}/api/wallets/transfer", "host": ["{{base_url}}"], "path": ["api", "wallets", "transfer"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Withdrawal",
+      "item": [
+        {
+          "name": "initiate",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-dev-user", "value": "{{dev_user}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"idempotencyKey\": \"withdraw-{{run_id}}\",\n  \"debtorAccount\": { \"schemeName\": \"iban\", \"identification\": \"LY79004400000012345678901\", \"name\": \"Alice\" },\n  \"creditorInstitution\": { \"name\": \"Jumhouria\", \"code\": \"002\" },\n  \"amountMinor\": 50000,\n  \"feeMinor\": 2000,\n  \"description\": \"Test withdrawal\"\n}" },
+            "url": { "raw": "{{base_url}}/api/withdrawals/initiate", "host": ["{{base_url}}"], "path": ["api", "withdrawals", "initiate"] }
+          }
+        },
+        {
+          "name": "confirm",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-dev-user", "value": "{{dev_user}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"transactionId\": \"REPLACE_WITH_WITHDRAW_TX_ID\"\n}" },
+            "url": { "raw": "{{base_url}}/api/withdrawals/confirm", "host": ["{{base_url}}"], "path": ["api", "withdrawals", "confirm"] }
+          }
+        },
+        {
+          "name": "status enquiry",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-dev-user", "value": "{{dev_user}}" }],
+            "url": { "raw": "{{base_url}}/api/withdrawals/REPLACE_WITH_WITHDRAW_TX_ID/status", "host": ["{{base_url}}"], "path": ["api", "withdrawals", "REPLACE_WITH_WITHDRAW_TX_ID", "status"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Didit KYC",
+      "item": [
+        {
+          "name": "create session",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-dev-user", "value": "{{dev_user}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"vendorId\": \"vendor-{{run_id}}\",\n  \"branchId\": \"main\"\n}" },
+            "url": { "raw": "{{base_url}}/api/verifications/didit/session", "host": ["{{base_url}}"], "path": ["api", "verifications", "didit", "session"] }
+          }
+        }
+      ]
+    }
+  ]
+}
