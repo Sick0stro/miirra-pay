@@ -179,6 +179,25 @@ async function main() {
   const complaint = await call('POST', '/api/compliance/complaints', { subject: 'test complaint' });
   ok('complaint path works', complaint.status === 201 && complaint.data?.status === 'open');
 
+  // ── Layer 8: Mesh <-> Pay boundary (offline signed packets) ────────────────
+  section('8. Mesh <-> Pay boundary (offline signed packets) (Art. 9(8), 9(11), 15, 21(5))');
+  // The mesh adapter runs in Node (not the Worker); spawn its test and check exit.
+  {
+    const { execFileSync } = await import('node:child_process');
+    let meshOk = false;
+    let meshOut = '';
+    try {
+      meshOut = execFileSync('node', ['--experimental-strip-types', 'mesh/mesh-adapter.test.mjs'], {
+        cwd: process.cwd(), encoding: 'utf8', timeout: 30000,
+      });
+      meshOk = /GREEN/.test(meshOut);
+    } catch (e) {
+      meshOut = (e && e.stdout ? e.stdout : '') + (e && e.stderr ? e.stderr : '');
+    }
+    ok('mesh boundary tests pass (offline settle, double-spend, tamper, cap)',
+      meshOk, meshOk ? undefined : meshOut.split('\n').slice(-6).join(' '));
+  }
+
   // ── summary ───────────────────────────────────────────────────────────────
   out(`\n${'─'.repeat(48)}`);
   out(`RESULT: ${pass} passed, ${fail} failed`);

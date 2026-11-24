@@ -12,7 +12,8 @@
     "db:migrate": "node scripts/migrate.mjs",
     "mock:lypay": "node tests/mock-lypay.mjs",
     "test:e2e": "node tests/e2e.mjs",
-    "eval:cbl": "node evals/cbl/run_all_evals.mjs"
+    "eval:cbl": "node evals/cbl/run_all_evals.mjs",
+    "test:mesh": "node --experimental-strip-types mesh/mesh-adapter.test.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",

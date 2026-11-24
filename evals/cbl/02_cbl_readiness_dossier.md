@@ -78,9 +78,26 @@ principal ever debits to `COMPANY_OPERATING` (segregation asserted).
 ```
 [AUTO-POPULATE FROM evals/cbl/latest_eval.log]
 ```
-- **Total Checks Run:** 17 | **Passed:** 17 | **Failed:** 0
-- **Layers covered:** currency/endpoint perimeter · offline P2P sync · double-spend & cap · unsettled-topup block · ledger reconciliation & segregation · KYC/AML & step-up · audit trail + privacy + closure SLA.
-- **Reproduce Command:** `node evals/cbl/run_all_evals.mjs` (full suite: `node tests/e2e.mjs` → 31/31).
+- **CBL eval checks:** 18 | **Passed:** 18 | **Failed:** 0 (7 server layers + mesh boundary layer)
+- **Mesh boundary tests:** 12/12 (`node --experimental-strip-types mesh/mesh-adapter.test.mjs`)
+- **Full payments E2E:** 31/31 (`node tests/e2e.mjs`)
+- **Layers covered:** currency/endpoint perimeter · offline P2P sync (mesh boundary) · double-spend & cap · unsettled-topup block · ledger reconciliation & segregation · KYC/AML & step-up · audit trail + privacy + closure SLA · mesh↔pay boundary.
+- **Reproduce Commands:**
+  - `node evals/cbl/run_all_evals.mjs` (CBL 18/18)
+  - `node --experimental-strip-types mesh/mesh-adapter.test.mjs` (mesh 12/12)
+  - `node tests/e2e.mjs` (payments 31/31)
+
+---
+
+## 5a. Payment-over-Mesh Boundary (Art. 9(8), 9(11), 15, 21(5))
+Miirra Mesh (`mesh.miirra.com`) owns ALL networking — peer discovery, WiFi/BLE,
+relays, STUN/TURN, NAT hole-punching. Miirra Pay consumes a `MeshTransport`
+adapter and enforces every payment rule at the payment layer
+(`mesh/mesh-adapter.ts`): LYD-only amounts, pre-funded offline reservation,
+device signatures + monotonic seq + prev-hash chaining, per-tx/cumulative/
+duration caps, idempotent settle + double-spend quarantine on reconnect, and
+hash-chained audit of settle/reject events. No socket, relay, or driver code
+lives in Miirra Pay.
 
 ---
 

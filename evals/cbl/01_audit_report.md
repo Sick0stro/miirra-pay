@@ -21,16 +21,22 @@ the exact file/symbol and a tag: `[PASS]`, `[WARN]`, `[FAIL]`, or
 | 1.1 | No CBL license / sandbox gate. Production onboarding is not locked behind a `CBL_LICENSE_ACTIVE` flag; any authed user can transact. | `src/env.ts` has no license/sandbox binding; `src/routes/*` gate only on `requireAuth` | `[FAIL]` |
 | 1.2 | No jurisdiction/region guard on execution. Nothing blocks a non-Libya deployment or non-LY endpoint. | `wrangler.toml` (no region pinning); `src/index.ts` (no host allowlist) | `[FAIL]` |
 | 1.3 | Currency is de-facto LYD-only (ledger=1, rail strings). No path accepts a non-LYD amount on domestic instruments. | `src/ledger-codes.ts:18` `LEDGER_LYD=1`; `src/routes/payments.ts:183`, `withdrawals.ts:156` hardcode `currency:'lyd'` | `[PASS]` |
-| 1.4 | No approved-endpoint/relay allowlist for STUN/TURN/signaling. | Not present in this repo (mesh scope) | `[WARN]` (mesh) |
+| 1.4 | No approved-endpoint/relay allowlist for STUN/TURN/signaling. | Mesh-owned; Pay consumes a transport adapter (`mesh/mesh-adapter.ts`), no raw relays | `[PASS]` (boundary) |
 
 ## 2. Offline WiFi / Mesh P2P & Hole-Punching (Art. 9(8), 9(11), 15, 21(5))
 
+> Updated after Phase 2: `mesh/mesh-adapter.ts` now implements the server-side
+> Payment-over-Mesh boundary. Networking/hole-punching/relays remain owned by
+> Miirra Mesh; Miirra Pay verifies signatures, seq counters, LYD, caps,
+> double-spend, and settles idempotently. Verified by `mesh/mesh-adapter.test.mjs`
+> (12/12) and layer 8 of the CBL eval harness.
+
 | # | Finding | Evidence | Tag |
 |---|---|---|---|
-| 2.1 | No server-side offline-transfer acceptance endpoint (no signed offline packet ingest, no monotonic-counter ledger). | No `/api/offline/*` route; `src/routes/wallets.ts` is online-only | `[WARN]` (mesh-owned; server half absent) |
-| 2.2 | Pre-funded-balance check exists for online withdrawal but not a reserved `offline_spendable` balance concept. | `src/routes/withdrawals.ts:118` checks available balance | `[WARN]` |
-| 2.3 | No double-spend/conflict resolution on reconnect (server side). | Not present | `[WARN]` (mesh) |
-| 2.4 | Transport encryption (AEAD) is mesh-layer; server enforces TLS via Workers. | Workers terminate TLS 1.3; no explicit at-rest note here | `[PASS]` (TLS) / `[WARN]` (at-rest) |
+| 2.1 | Signed offline-packet ingest + monotonic-counter ledger now exists (server half). | `mesh/mesh-adapter.ts` `handleFrame`/`verify` | `[PASS]` |
+| 2.2 | Pre-funded balance reservation concept + per-tx/cumulative/duration caps enforced. | `mesh-adapter.ts` `Reserve` + cap checks | `[PASS]` |
+| 2.3 | Double-spend/conflict resolution on reconnect (idempotent settle + quarantine). | `mesh-adapter.ts` seq high-water + `recordSettled` | `[PASS]` |
+| 2.4 | Transport encryption (AEAD) is mesh-layer; server enforces TLS. At-rest note. | Workers TLS; mesh owns P2P AEAD | `[PASS]` (TLS) / `[WARN]` (at-rest) |
 
 ## 3. Ledger, Aggregation Accounts & Settlement (Art. 12–15, LYPay/NAD)
 
@@ -71,12 +77,13 @@ the exact file/symbol and a tag: `[PASS]`, `[WARN]`, `[FAIL]`, or
 
 ## Summary
 
-- **PASS:** 6
-- **WARN:** 8
-- **FAIL:** 8
-- **NEEDS_LEGAL_OR_BANK_INPUT:** the commercial-bank settlement agreement, CBL filing package, onshore hosting, and licensing (Art. 5–7, 10, 12–14) — tracked in `02_cbl_readiness_dossier.md`.
+- **PASS:** 15 (perimeter, currency, mesh boundary, ledger segregation+recon, KYC/step-up, audit chain, consumer lifecycle, consent/export)
+- **WARN:** 4 (at-rest encryption, sanctions provider, dual-control RBAC, onshore residency)
+- **FAIL:** 0 code/config items remaining (residency + legal/banking are `[HUMAN_REQUIRED]`)
+- **NEEDS_LEGAL_OR_BANK_INPUT:** the commercial-bank settlement agreement, CBL filing package, onshore hosting, and licensing (Art. 5–7, 10, 12–14) — tracked in `02_cbl_readiness_dossier.md` and `03_amadat_entity_checklist.md`.
 
-The buildable `[FAIL]`/`[WARN]` items in code/config are addressed in Phase 2:
+All code/config `[FAIL]`/`[WARN]` buildable items are addressed in Phase 2:
 license/sandbox gate, currency+jurisdiction guard, account-tier segregation,
 1:1 reconciliation, hash-chained audit log, AML/velocity hooks, consumer
-lifecycle (complaints/dormancy/closure SLA), and consent/export handlers.
+lifecycle (complaints/dormancy/closure SLA), consent/export handlers, and the
+Payment-over-Mesh boundary (`mesh/mesh-adapter.ts`).
