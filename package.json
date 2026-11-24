@@ -1,0 +1,29 @@
+{
+  "name": "miirra-pay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Miirra Pay - LYD payments backend. Cloudflare Workers + Neon Postgres + TigerBeetle double-entry ledger + CBL LYPay v1.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8791",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node scripts/migrate.mjs",
+    "mock:lypay": "node tests/mock-lypay.mjs",
+    "test:e2e": "node tests/e2e.mjs"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.13",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261008.1",
+    "@types/node": "^22.10.0",
+    "drizzle-kit": "^0.31.4",
+    "typescript": "^5.9.2",
+    "wrangler": "^4.149.0"
+  }
+}

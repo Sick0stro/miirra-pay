@@ -1,0 +1,14 @@
+name = "miirra-pay"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# Miirra Pay is its OWN worker — deliberately not mounted inside miirra-api.
+# It owns the payment rail (LYPay), the Neon ledger of record, and the
+# TigerBeetle bridge binding. It shares the same Neon database cluster as the
+# rest of the platform (miirra_auth_db) but lives in its own `miirra_pay`
+# schema, so a bad payments migration can never take the orders API down.
+
+[observability]
+enabled = true
