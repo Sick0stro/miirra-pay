@@ -62,6 +62,8 @@ export type Reserve = {
   offlineCapMinor: bigint;
   /** Max offline duration before mandatory sync, ms. */
   maxOfflineMs: number;
+  /** Max tolerated client clock skew ahead of the server, ms (default 5 min). */
+  maxClockSkewMs?: number;
   /** Per-transfer cap, minor units. */
   perTransferCapMinor: bigint;
   /** Verify a device signature over the canonical packet. */
@@ -185,24 +187,36 @@ export class MeshPaymentTransportAdapter {
     }
 
     // 5. Offline caps: per-transfer (done) + cumulative offline spend.
-    const state = this.offlineSpend.get(packet.sender_id) ?? { spent: 0n, since: packet.ts };
-    // Reset the window if the offline session is older than the max duration.
-    const windowExpired = packet.ts - state.since > this.reserve.maxOfflineMs;
-    const spent = windowExpired ? 0n : state.spent;
+    //    The window is anchored to the SERVER clock on first sight (not the
+    //    client's ts) so a client that sets its clock forward cannot reset the
+    //    offline window and evade the cap (offline clock-skew guard).
+    const skew = packet.ts - Date.now();
+    // Reject packets whose timestamp is skewed FURTHER AHEAD than the allowed
+    // tolerance — a forward-set client clock attempting to reset limits.
+    const maxSkew = this.reserve.maxClockSkewMs ?? 5 * 60_000;
+    if (skew > maxSkew) {
+      return { ok: false, reason: `clock skew ${skew}ms ahead of server (reject)`, quarantine: true };
+    }
+    const serverNow = Date.now();
+    const prior = this.offlineSpend.get(packet.sender_id);
+    const windowExpired = prior ? serverNow - prior.since > this.reserve.maxOfflineMs : true;
+    const spent = windowExpired ? 0n : (prior?.spent ?? 0n);
     if (spent + BigInt(packet.amount_minor) > this.reserve.offlineCapMinor) {
       return { ok: false, reason: 'exceeds cumulative offline cap', quarantine: true };
     }
     // 6. Offline-duration cap: a packet older than the max offline window must
     //    sync online first (its reserved window has lapsed).
-    if (Date.now() - packet.ts > this.reserve.maxOfflineMs) {
+    if (serverNow - packet.ts > this.reserve.maxOfflineMs) {
       return { ok: false, reason: 'offline window expired — sync online first', quarantine: true };
     }
 
-    // Passed: advance the high-water mark and the offline-spend window.
+    // Passed: advance the high-water mark and the offline-spend window. The
+    // window `since` is the SERVER's clock, so offline spend can never be reset
+    // by client clock skew.
     this.seqHighWater.set(packet.sender_id, packet.seq);
     this.offlineSpend.set(packet.sender_id, {
       spent: spent + BigInt(packet.amount_minor),
-      since: windowExpired ? packet.ts : state.since,
+      since: windowExpired ? serverNow : prior!.since,
     });
 
     return { ok: true, packet };

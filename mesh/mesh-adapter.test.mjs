@@ -157,6 +157,34 @@ async function main() {
     ok('negative amount rejected', r.ok === false, JSON.stringify(r));
   }
 
+  // 7. Forward clock-skew guard: a packet whose ts is far in the future (a
+  //    client that set its clock ahead to reset the daily window) is rejected.
+  {
+    const { mesh } = makeMockMesh();
+    const { reserve, settled } = makeReserve();
+    const adapter = new MeshPaymentTransportAdapter(mesh, reserve);
+    const future = Date.now() + 60 * 60_000; // 1h ahead
+    const r = await adapter.handleFrame(packet(1, { ts: future }));
+    ok('forward clock-skew rejected', r.ok === false && /skew/.test(r.reason), JSON.stringify(r));
+    ok('skewed packet not settled', settled.size === 0);
+  }
+
+  // 8. Server-anchored offline window: a client cannot reset cumulative spend
+  //    by sending an old ts (the window `since` is the server's clock).
+  {
+    const { mesh } = makeMockMesh();
+    const { reserve } = makeReserve();
+    const adapter = new MeshPaymentTransportAdapter(mesh, reserve);
+    // perTransferCap 100000; offlineCap 500000. Six × 90000 = 540000 > cap,
+    // each individually under the per-transfer cap. The cap must hold.
+    let last;
+    for (let i = 1; i <= 6; i++) {
+      last = await adapter.handleFrame(packet(i, { amount_minor: 90000 }));
+    }
+    ok('cumulative cap holds across transfers (server-anchored window)',
+      last.ok === false && /offline cap/.test(last.reason), JSON.stringify(last));
+  }
+
   console.log(`\n${'─'.repeat(48)}`);
   console.log(`RESULT: ${pass} passed, ${fail} failed`);
   if (fail > 0) { console.log('Failures:'); for (const f of failures) console.log(`  - ${f}`); }

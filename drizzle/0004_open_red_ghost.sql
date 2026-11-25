@@ -1,0 +1,2 @@
+ALTER TABLE "miirra_pay"."topup_intents" ADD COLUMN "rail" text DEFAULT 'bank_transfer' NOT NULL;--> statement-breakpoint
+ALTER TABLE "miirra_pay"."topup_intents" ADD COLUMN "tier" text DEFAULT 'SDD' NOT NULL;

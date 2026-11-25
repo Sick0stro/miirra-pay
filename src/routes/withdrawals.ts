@@ -10,6 +10,7 @@ import { ledgerFromEnv, railLimitsFromEnv } from '../runtime';
 import { needsFaceVerification, withinPerTransferCap, formatLyd, lydToRailString } from '../money';
 import { requireCblPerimeter } from '../cbl-perimeter';
 import { appendAudit } from '../audit';
+import { checkWithdrawal, type KycTier } from '../risk-policy';
 import { lypayFromEnv, type LypayTransaction } from '../lypay';
 import { uuid } from '../ids';
 import { parse } from '../validate';
@@ -48,6 +49,8 @@ const InitiateSchema = z.object({
   description: z.string().min(1),
   /** Required when amount > 1,000 LYD: a Didit session approved for this user. */
   diditSessionId: z.string().optional(),
+  /** The user's KYC tier (drives the risk caps); defaults to SDD. */
+  tier: z.enum(['SDD', 'CDD', 'EDD']).optional().default('SDD'),
 });
 
 const ConfirmSchema = z.object({
@@ -96,6 +99,11 @@ withdrawalsRoute.post('/initiate', requireAuth, async (c) => {
   const limits = railLimitsFromEnv(c.env);
   if (!withinPerTransferCap(body.amountMinor, limits)) {
     throw badRequest(`Amount exceeds per-transfer limit of ${formatLyd(limits.perTransferMinor)}`, 'exceeds_rail_limit');
+  }
+  // Tier risk cap (Risk Policy v1.0): SDD <= 3,000, CDD <= 20,000, EDD <= 50,000 LYD.
+  const tierCheck = checkWithdrawal(body.tier as KycTier, BigInt(body.amountMinor));
+  if (!tierCheck.ok) {
+    throw badRequest(tierCheck.reason, tierCheck.code);
   }
   if (needsFaceVerification(body.amountMinor)) {
     if (!body.diditSessionId) {

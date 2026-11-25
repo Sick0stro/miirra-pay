@@ -20,6 +20,7 @@ node scripts/migrate.mjs           # apply schema (ws Pool driver; idempotent)
 npx wrangler dev --port 8791       # ALWAYS 8791 (8790 = miirra-api, 8787 = partner agent)
 node tests/mock-lypay.mjs          # standalone mock LYPay on :8799 (separate shell)
 node tests/e2e.mjs                 # full E2E suite → 31/31 green
+node tests/ui-smoke.mjs            # wallet UI + balance/activity smoke → 21/21
 npx tsc --noEmit                   # must be clean
 ```
 
@@ -53,7 +54,12 @@ Production adds: `DIDIT_API_KEY`, `DIDIT_WEBHOOK_SECRET`, `DIDIT_WORKFLOW_ID`,
 - `src/webhook-hmac.ts` — LYPay HMAC verify (fail-closed).
 - `src/db/schema.ts` — 12 tables in `miirra_pay`.
 - `src/routes/` — `topups`, `payments`, `wallets`, `withdrawals`,
-  `verifications`, `didit-webhooks`, `webhooks` (LYPay), `health`.
+  `verifications`, `didit-webhooks`, `webhooks` (LYPay), `health`, `app`
+  (the wallet front end).
+- `src/risk-policy.ts` — Risk Management Policy v1.0 as executable config:
+  SDD/CDD/EDD tier caps, agent tiers, Africa/Tripoli day boundary, escalation SLA.
+- `src/topup-rails.ts` — modular top-up rails (`integrated` / `coming_soon`).
+- `tests/ui-smoke.mjs` — 21-check smoke test for the wallet page + balance/activity.
 - `ledger-service.mjs` — standalone TigerBeetle **bridge** (native
   `tigerbeetle-node` + authenticated HTTP surface). Runs where native addons
   can (a VM/container next to the cluster), NOT in the Worker.
@@ -66,7 +72,10 @@ Production adds: `DIDIT_API_KEY`, `DIDIT_WEBHOOK_SECRET`, `DIDIT_WORKFLOW_ID`,
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | NeonDB + TigerBeetle bridge readiness (no secrets) |
+| GET | `/app` | **the wallet front end** (self-contained page; root `/` redirects here) |
 | GET | `/v1/me` | whoami (proves auth) |
+| GET | `/api/wallets/balance` | caller's LYD balance (ledger-first, DB projection fallback) |
+| GET | `/api/wallets/activity` | caller's money-movement feed (from ledger bindings) |
 | POST | `/api/topups/initiate` | top-up intent → deposit reference + receiving details |
 | GET | `/api/topups`, `/api/topups/:id` | list / read top-ups |
 | POST | `/api/payments/initiate` | P2P/P2M/M2M initiate (two-phase pending) |
@@ -123,6 +132,28 @@ Retries are safe: a re-posted pending returns `exists` /
 - internalMerchantReference (P2M): `[INST 3][TIMESTAMP 10][REF 8 alnum]`.
 - Refund body keys are snake_case (`payment_reference`, `transaction_timestamp`);
   confirm body keys are camelCase (`paymentReference`, `transactionTimestamp`).
+## Wallet front end (`/app`)
+
+A single self-contained page served by the worker (`src/routes/app.ts`) — no
+build step, no framework. It is a **view over this worker's own JSON API**, so
+every server-side control (tier caps, face gate, AML, CBL perimeter) still runs;
+the UI cannot bypass a rule.
+
+- Auth: stores a Better Auth bearer token in `localStorage` (`mp_token`) and
+  sends `Authorization: Bearer …`; in dev (`AUTH_DEV_MODE=1`) it falls back to
+  `x-dev-user` (`mp_devuser`) so the page works with no identity server. The
+  login gate appears when neither is set.
+- Money: LYD everywhere. Amounts are entered in major units and converted to
+  minor units in exactly ONE place (`toMinor`, 3-dp to match the LYPay rail);
+  the API speaks minor units. `fmtMinor` is the only formatter.
+- Screens: balance card (available + pending + source), quick actions
+  (Send / Top up / Withdraw / Scan), modular top-up rails, activity feed,
+  bottom tab bar, and action sheets for each flow. EN/AR toggle with full RTL.
+- Endpoints it consumes: `GET /api/wallets/balance`,
+  `GET /api/wallets/activity`, `GET /api/topups/rails`,
+  `POST /api/wallets/transfer`, `POST /api/topups/initiate`,
+  `POST /api/withdrawals/initiate`.
+
 ## CBL compliance layer (2026-11-24)
 
 Regulatory guardrails against the CBL Electronic Payment Services Regulation

@@ -15,6 +15,7 @@ import { walletsRoute } from './routes/wallets';
 import { withdrawalsRoute } from './routes/withdrawals';
 import { complianceRoute } from './routes/compliance';
 import { healthRoute } from './routes/health';
+import { appRoute } from './routes/app';
 
 /**
  * Miirra Pay — the LYD payments worker.
@@ -55,6 +56,9 @@ app.onError((err, c) => {
 
 // Dependency-aware health (NeonDB + TigerBeetle bridge), no secret exposure.
 app.route('/', healthRoute);
+
+// The wallet front end (self-contained page; talks only to this worker's API).
+app.route('/', appRoute);
 
 // Who am I — proves the auth path works and gives the client its user id.
 app.get('/v1/me', requireAuth, (c) => {

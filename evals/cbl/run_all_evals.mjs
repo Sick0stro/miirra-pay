@@ -214,7 +214,34 @@ async function main() {
       bindOk ? undefined : bindOut.split('\n').filter((l) => /✗|FAILED|hit\(s\)/.test(l)).join(' ').slice(0, 400));
   }
 
-  // ── summary ───────────────────────────────────────────────────────────────
+  // ── Layer 10: Risk policy (tiers, rails, Tripoli boundary) ────────────────
+  section('10. Risk policy: SDD/CDD/EDD tiers + modular rails + Tripoli boundary (Risk Policy v1.0)');
+  {
+    // Rails: integrated + coming_soon both present, no dead buttons.
+    const rails = await call('GET', '/api/topups/rails');
+    const railList = rails.data?.rails ?? [];
+    ok('rails list has integrated + coming_soon states',
+      railList.some((r) => r.status === 'integrated') && railList.some((r) => r.status === 'coming_soon'),
+      JSON.stringify(rails.data).slice(0, 100));
+    // SDD top-up cap (300 LYD = 30000) enforced; EDD (10000 LYD) allows more.
+    const sdd = await call('POST', '/api/topups/initiate', { idempotencyKey: `cbl-sdd-${RUN}`, amountMinor: 40000, tier: 'SDD' });
+    ok('SDD single top-up cap (<=300 LYD) enforced', sdd.status === 409 && sdd.data?.error?.code === 'exceeds_topup_cap', JSON.stringify(sdd.data));
+    const edd = await call('POST', '/api/topups/initiate', { idempotencyKey: `cbl-edd-${RUN}`, amountMinor: 40000, tier: 'EDD' });
+    ok('EDD allows 400 LYD top-up (cap 10,000 LYD)', edd.status === 201, JSON.stringify(edd.data));
+    // SDD P2P cap (150 LYD = 15000) enforced.
+    const p2p = await call('POST', '/api/wallets/transfer', { idempotencyKey: `cbl-p2p-${RUN}`, receiver: { userId: `cbl-recv-${RUN}` }, amountMinor: 20000, tier: 'SDD' });
+    ok('SDD P2P cap (<=150 LYD) enforced', p2p.status === 400 && p2p.data?.error?.code === 'exceeds_p2p_cap', JSON.stringify(p2p.data));
+    // Tripoli day-boundary helper: start-of-day is the UTC instant of 00:00 local.
+    const { tripoliStartOfDay } = await import('../../src/risk-policy.ts').catch(() => ({}));
+    if (typeof tripoliStartOfDay === 'function') {
+      // 2026-01-15T00:00:00 Tripoli (= 2026-01-14T22:00:00Z) must map to that UTC instant.
+      const tripoliMidnightUtc = Date.UTC(2026, 0, 14, 22, 0, 0);
+      const a = tripoliStartOfDay(tripoliMidnightUtc + 3600_000); // 01:00 Tripoli
+      ok('Africa/Tripoli day boundary = 22:00 UTC prev day', a === tripoliMidnightUtc, `got ${new Date(a).toISOString()}`);
+    } else {
+      ok('Africa/Tripoli day boundary helper present', false, 'risk-policy import failed');
+    }
+  }
   out(`\n${'─'.repeat(48)}`);
   out(`RESULT: ${pass} passed, ${fail} failed`);
   if (fail > 0) { out('Failures:'); for (const f of failures) out(`  - ${f}`); }

@@ -113,6 +113,14 @@ export const paymentTransactions = schema.table(
 
     senderPartyId: uuid('sender_party_id'),
     receiverPartyId: uuid('receiver_party_id'),
+    /**
+     * The platform user id on the OTHER side of the move, when the other side
+     * is a Miirra user (a wallet-to-wallet transfer). Kept as a plain id (not a
+     * FK) because identity lives in miirra-web's schema — this worker only
+     * READS that table for display names, it never writes it. Used to render
+     * "Ahmed" next to a transaction in the activity feed.
+     */
+    counterpartyUserId: text('counterparty_user_id'),
     /** Commercial order this payment settles (P2M/M2M), if any. */
     orderId: uuid('order_id'),
 
@@ -298,6 +306,10 @@ export const topupIntents = schema.table(
     depositReference: text('deposit_reference').notNull(),
     /** Minor-unit amount the user intends to add. */
     amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(),
+    /** Which rail the top-up is through (bank_transfer, agent_cash_in, ...). */
+    rail: text('rail').notNull().default('bank_transfer'),
+    /** The user's KYC tier at initiation (SDD/CDD/EDD) — drives the risk caps. */
+    tier: text('tier').$type<'SDD' | 'CDD' | 'EDD'>().notNull().default('SDD'),
     /** LYPay/NAD/IBAN receiving details shown to the user. */
     receivingDetails: text('receiving_details'),
     /** state: initiated | confirmed | unmatched | expired | cancelled */

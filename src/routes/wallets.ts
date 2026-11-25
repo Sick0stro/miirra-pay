@@ -6,12 +6,20 @@ import { requireAuth, userOf } from '../auth';
 import type { AppEnv } from '../env';
 import { badRequest, conflict, forbidden, notFound } from '../errors';
 import { getDb } from '../db';
-import { ledgerFromEnv, railLimitsFromEnv } from '../runtime';
-import { needsFaceVerification, withinPerTransferCap, formatLyd } from '../money';
+import { ledgerConfig, ledgerFromEnv, railLimitsFromEnv } from '../runtime';
+import { createLedgerClient } from '../ledger';
+import { accountIdFor } from '../ledger-codes';
+import {
+  needsFaceVerification,
+  withinPerTransferCap,
+  formatLyd,
+  FACE_VERIFY_THRESHOLD_MINOR,
+} from '../money';
 import { notify } from '../notifications';
 import { requireCblPerimeter } from '../cbl-perimeter';
 import { screen as amlScreen } from '../aml';
 import { appendAudit } from '../audit';
+import { checkP2pTransfer, type KycTier } from '../risk-policy';
 import { uuid } from '../ids';
 import { parse } from '../validate';
 
@@ -60,9 +68,193 @@ const TransferSchema = z.object({
   note: z.string().optional(),
   /** Present when the client completed a Didit face check for this amount. */
   diditSessionId: z.string().optional(),
+  /** The sender's KYC tier (drives the risk caps); defaults to SDD. */
+  tier: z.enum(['SDD', 'CDD', 'EDD']).optional().default('SDD'),
 });
 
 export const walletsRoute = new Hono<AppEnv>();
+
+// ── GET /api/wallets/balance ──────────────────────────────────────────────────
+/**
+ * The caller's LYD balance.
+ *
+ * TWO SOURCES, ONE ANSWER:
+ *  - `tigerbeetle` (authoritative): the ledger's own account balance, read
+ *    through the bridge. This is the number that must be trusted.
+ *  - `database_projection` (fallback): the balance projected from the posted /
+ *    pending rows in `ledger_transfer_bindings`. It is used when the ledger is
+ *    in mock mode (the in-process mock is per-request and cannot hold a
+ *    balance across requests) or when the bridge is unreachable.
+ *
+ * The projection is never silently preferred over the ledger: when both are
+ * available they are returned side by side and `mismatch` is flagged, so a
+ * drift between the ledger of record and the DB is visible instead of hidden.
+ */
+walletsRoute.get('/balance', requireAuth, async (c) => {
+  const user = userOf(c);
+  const db = getDb(c.env.DATABASE_URL);
+  const accountId = accountIdFor('user', user.id);
+  const accountIdStr = accountId.toString();
+
+  // Projection from the ledger bindings (always available).
+  const proj = await db.execute(sql`
+    SELECT
+      COALESCE(SUM(CASE WHEN credit_account_id = ${accountIdStr} THEN amount_minor ELSE 0 END), 0) AS credits,
+      COALESCE(SUM(CASE WHEN debit_account_id  = ${accountIdStr} THEN amount_minor ELSE 0 END), 0) AS debits,
+      COALESCE(SUM(CASE WHEN credit_account_id = ${accountIdStr} AND phase = 'pending' THEN amount_minor ELSE 0 END), 0) AS pending_credits,
+      COALESCE(SUM(CASE WHEN debit_account_id  = ${accountIdStr} AND phase = 'pending' THEN amount_minor ELSE 0 END), 0) AS pending_debits
+    FROM miirra_pay.ledger_transfer_bindings
+    WHERE phase IN ('posted', 'pending')
+      AND (credit_account_id = ${accountIdStr} OR debit_account_id = ${accountIdStr})
+  `);
+  const p = (proj.rows[0] ?? {}) as Record<string, string | number>;
+  const projectedAvailable = Number(p.credits ?? 0) - Number(p.debits ?? 0);
+  const projectedPending = Number(p.pending_credits ?? 0) - Number(p.pending_debits ?? 0);
+
+  // Authoritative source: the ledger itself (only reachable over the bridge).
+  let ledgerAvailable: number | null = null;
+  let ledgerPending: number | null = null;
+  const cfg = ledgerConfig(c.env);
+  if (cfg.mode === 'http') {
+    try {
+      const rows = await createLedgerClient(cfg).lookupAccounts([accountId]);
+      const row = rows[0];
+      if (row) {
+        ledgerAvailable = Number(row.credits_posted) - Number(row.debits_posted);
+        ledgerPending = Number(row.credits_pending) - Number(row.debits_pending);
+      }
+    } catch (err) {
+      // A bridge outage is not a zero balance. Log loudly and fall back to the
+      // projection — the response says which source it used.
+      console.error('[miirra-pay] tigerbeetle balance lookup failed:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  const availableMinor = ledgerAvailable ?? projectedAvailable;
+  const pendingMinor = ledgerPending ?? projectedPending;
+  const limits = railLimitsFromEnv(c.env);
+
+  return c.json({
+    currency: 'LYD',
+    accountId: accountIdStr,
+    availableMinor,
+    pendingMinor,
+    source: ledgerAvailable === null ? 'database_projection' : 'tigerbeetle',
+    /** Present only when both sources were readable and they disagree. */
+    mismatch: ledgerAvailable === null ? null : ledgerAvailable !== projectedAvailable,
+    projectedAvailableMinor: projectedAvailable,
+    limits: {
+      perTransferMinor: Number(limits.perTransferMinor),
+      dailyMinor: Number(limits.dailyMinor),
+      faceVerifyThresholdMinor: FACE_VERIFY_THRESHOLD_MINOR,
+    },
+  });
+});
+
+// ── GET /api/wallets/activity ─────────────────────────────────────────────────
+/**
+ * The caller's money movement feed — one row per movement, newest first.
+ *
+ * The feed is built from the LEDGER BINDINGS (which know which account was
+ * debited and which credited) joined to the transaction row (which knows the
+ * status and the type). That means a movement is visible here exactly when it
+ * exists in the ledger — the feed cannot drift from the money.
+ *
+ * Top-ups are included too: their credit leg lands in the same bindings table
+ * (PLATFORM_CLEARING → user), so a matched deposit appears as money in.
+ */
+walletsRoute.get('/activity', requireAuth, async (c) => {
+  const user = userOf(c);
+  const db = getDb(c.env.DATABASE_URL);
+  const accountIdStr = accountIdFor('user', user.id).toString();
+  const limit = Math.min(Math.max(Number(c.req.query('limit') ?? '50'), 1), 200);
+
+  const rows = await db.execute(sql`
+    SELECT
+      t.id,
+      t.transaction_type,
+      t.status,
+      t.principal_minor,
+      t.fee_minor,
+      t.counterparty_user_id,
+      t.idempotency_key,
+      t.created_at,
+      COALESCE(SUM(CASE WHEN b.debit_account_id  = ${accountIdStr} THEN b.amount_minor ELSE 0 END), 0) AS out_minor,
+      COALESCE(SUM(CASE WHEN b.credit_account_id = ${accountIdStr} THEN b.amount_minor ELSE 0 END), 0) AS in_minor,
+      COALESCE(SUM(CASE WHEN b.phase = 'pending' THEN b.amount_minor ELSE 0 END), 0) AS pending_minor
+    FROM miirra_pay.ledger_transfer_bindings b
+    JOIN miirra_pay.payment_transactions t ON t.id = b.transaction_id
+    WHERE b.debit_account_id = ${accountIdStr} OR b.credit_account_id = ${accountIdStr}
+    GROUP BY t.id, t.transaction_type, t.status, t.principal_minor, t.fee_minor,
+             t.counterparty_user_id, t.idempotency_key, t.created_at
+    ORDER BY t.created_at DESC
+    LIMIT ${limit}
+  `);
+
+  // Counterparty display names come from identity's table (read-only).
+  const ids = [
+    ...new Set(
+      rows.rows
+        .map((r) => (r as { counterparty_user_id?: string | null }).counterparty_user_id)
+        .filter((x): x is string => !!x),
+    ),
+  ];
+  const names = new Map<string, string>();
+  if (ids.length > 0) {
+    try {
+      const nameRows = await db.execute(sql`
+        SELECT id, name, email FROM public."user" WHERE id IN ${sql.raw(`(${ids.map((i) => `'${i.replace(/'/g, "''")}'`).join(',')})`)}
+      `);
+      for (const r of nameRows.rows as Array<{ id: string; name: string | null; email: string | null }>) {
+        names.set(r.id, r.name ?? r.email ?? r.id);
+      }
+    } catch (err) {
+      // Identity may not be reachable in some deployments — the feed still
+      // works, it just shows ids instead of names.
+      console.error('[miirra-pay] counterparty name lookup failed:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  const activity = rows.rows.map((r) => {
+    const row = r as {
+      id: string;
+      transaction_type: string;
+      status: string;
+      principal_minor: string | number;
+      fee_minor: string | number;
+      counterparty_user_id: string | null;
+      idempotency_key: string;
+      created_at: string | number;
+      out_minor: string | number;
+      in_minor: string | number;
+      pending_minor: string | number;
+    };
+    const outMinor = Number(row.out_minor);
+    const inMinor = Number(row.in_minor);
+    const counterpartyId = row.counterparty_user_id;
+    return {
+      id: row.id,
+      kind:
+        row.transaction_type === 'P2P' ? 'wallet_transfer'
+        : row.transaction_type === 'M2M' ? 'merchant_payment'
+        : row.transaction_type === 'M2P' ? 'refund'
+        : row.transaction_type === 'P2M' ? 'merchant_payment'
+        : 'payment',
+      direction: inMinor > outMinor ? 'in' : 'out',
+      amountMinor: inMinor > outMinor ? inMinor : outMinor,
+      feeMinor: Number(row.fee_minor),
+      status: row.status,
+      pending: Number(row.pending_minor) > 0,
+      counterparty: counterpartyId
+        ? { userId: counterpartyId, name: names.get(counterpartyId) ?? counterpartyId }
+        : null,
+      reference: row.idempotency_key,
+      createdAt: Number(row.created_at),
+    };
+  });
+
+  return c.json({ activity });
+});
 
 // ── QR / IBAN parsing ─────────────────────────────────────────────────────────
 
@@ -211,6 +403,12 @@ walletsRoute.post('/transfer', requireAuth, async (c) => {
     throw badRequest(`Amount exceeds per-transfer limit of ${formatLyd(limits.perTransferMinor)}`, 'exceeds_rail_limit');
   }
 
+  // Tier risk cap (Risk Policy v1.0): SDD <= 150, CDD <= 1,000, EDD <= 10,000 LYD.
+  const tierCheck = checkP2pTransfer(body.tier as KycTier, BigInt(body.amountMinor));
+  if (!tierCheck.ok) {
+    throw badRequest(tierCheck.reason, tierCheck.code);
+  }
+
   // Daily cumulative outflow (sum of this user's completed outbound today).
   const dayStart = startOfUtcDay(now);
   const dailyRows = await db.execute(sql`
@@ -288,10 +486,10 @@ walletsRoute.post('/transfer', requireAuth, async (c) => {
     INSERT INTO miirra_pay.payment_transactions
       (id, idempotency_key, transaction_type, direction, principal_minor, commission_minor, fee_minor,
        refundable_minor, tb_ledger_phase, tb_pending_debit_id, tb_pending_credit_ids,
-       status, last_event, created_at, updated_at)
+       counterparty_user_id, status, last_event, created_at, updated_at)
     VALUES (${txId}, ${idem}, 'P2P', 'outbound', ${body.amountMinor}, 0, ${body.feeMinor}, 0,
             'pending', ${ids[0]!.toString()}, ${JSON.stringify(ids.slice(1).map((x) => x.toString()))},
-            'acknowledged', 'wallet_initiate', ${now}, ${now})
+            ${receiverUserId}, 'acknowledged', 'wallet_initiate', ${now}, ${now})
   `);
   await persistWalletBindings(db, txId, transfers, now);
 

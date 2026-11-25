@@ -1,0 +1,1 @@
+ALTER TABLE "miirra_pay"."payment_transactions" ADD COLUMN "counterparty_user_id" text;

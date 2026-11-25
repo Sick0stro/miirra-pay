@@ -10,6 +10,8 @@ import { LedgerService } from '../ledger-service';
 import { createLedgerClient } from '../ledger';
 import { depositReference, uuid } from '../ids';
 import { parse } from '../validate';
+import { listRails, isRailLive, type TopUpRail } from '../topup-rails';
+import { checkTopUp, tierLimits, type KycTier } from '../risk-policy';
 
 /**
  * Top-ups — the Bank/LYPay → Miirra inbound funding flow.
@@ -29,9 +31,18 @@ const InitiateSchema = z.object({
   idempotencyKey: z.string().min(8).max(120),
   /** Minor-unit amount the user intends to add (LYD piastres). */
   amountMinor: z.number().int().positive(),
+  /** Which rail the user is topping up through (default bank_transfer). */
+  rail: z.string().optional().default('bank_transfer'),
+  /** The user's KYC tier (drives the risk caps); defaults to SDD. */
+  tier: z.enum(['SDD', 'CDD', 'EDD']).optional().default('SDD'),
 });
 
 export const topupsRoute = new Hono<AppEnv>();
+
+// ── GET /api/topups/rails ─────────────────────────────────────────────────────
+topupsRoute.get('/rails', (c) => {
+  return c.json({ rails: listRails() });
+});
 
 // ── POST /api/topups/initiate ────────────────────────────────────────────────
 topupsRoute.post('/initiate', requireAuth, async (c) => {
@@ -39,6 +50,17 @@ topupsRoute.post('/initiate', requireAuth, async (c) => {
   const user = userOf(c);
   const db = getDb(c.env.DATABASE_URL);
   const now = Date.now();
+
+  // Rail must be live (modular rails — no dead buttons).
+  if (!isRailLive(body.rail as TopUpRail)) {
+    throw conflict(`Top-up rail '${body.rail}' is not enabled yet`, 'rail_not_live');
+  }
+
+  // Tier risk caps (Risk Policy v1.0): single top-up cap.
+  const tierCheck = checkTopUp(body.tier as KycTier, BigInt(body.amountMinor));
+  if (!tierCheck.ok) {
+    throw conflict(tierCheck.reason, tierCheck.code);
+  }
 
   const idem = `topup:${body.idempotencyKey}`;
   const existing = await db.execute(sql`
@@ -63,9 +85,9 @@ topupsRoute.post('/initiate', requireAuth, async (c) => {
 
   await db.execute(sql`
     INSERT INTO miirra_pay.topup_intents
-      (id, user_id, idempotency_key, deposit_reference, amount_minor, receiving_details,
+      (id, user_id, idempotency_key, deposit_reference, amount_minor, rail, tier, receiving_details,
        status, expires_at, created_at)
-    VALUES (${id}, ${user.id}, ${idem}, ${ref}, ${body.amountMinor}, ${JSON.stringify(receivingDetails(c.env))},
+    VALUES (${id}, ${user.id}, ${idem}, ${ref}, ${body.amountMinor}, ${body.rail}, ${body.tier}, ${JSON.stringify(receivingDetails(c.env))},
             'initiated', ${expiresAt}, ${now})
   `);
 
