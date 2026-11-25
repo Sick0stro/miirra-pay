@@ -24,6 +24,7 @@ export function Icon({ name, className = 'w-6 h-6' }: { name: string; className?
     wifi: <><path d="M2 8.5a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0M8.5 15.5a6 6 0 0 1 7 0" /><path d="M12 19h.01" /></>,
     share: <><circle cx="6" cy="12" r="2.4" /><circle cx="18" cy="6" r="2.4" /><circle cx="18" cy="18" r="2.4" /><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6" /></>,
     chevron: <path d="M9 6l6 6-6 6" />,
+    user: <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></>,
   };
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
@@ -64,17 +65,17 @@ export function TopBar() {
   return <header className="pt-[calc(6px+env(safe-area-inset-top))] pb-2" />;
 }
 
-// ── Bottom navigation (strictly 3) ───────────────────────────────────────────
+// ── Bottom navigation (strictly 3, compact) ──────────────────────────────────
 export function BottomBar({ tab, setTab, lang, onPay }: { tab: string; setTab: (t: any) => void; lang: Lang; onPay: () => void }) {
   const t = (k: string) => (lang === 'ar' ? ({ card: 'البطاقة', pay: 'ادفع', activity: 'النشاط' } as any)[k] : ({ card: 'Card', pay: 'Pay', activity: 'Activity' } as any)[k]);
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-[460px] items-center justify-around px-4 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2"
+    <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-[420px] items-center justify-around px-4 pb-[calc(8px+env(safe-area-inset-bottom))] pt-1"
       style={{ background: 'linear-gradient(to top, rgba(84,145,224,.92), rgba(84,145,224,0))' }}>
-      <div className="flex w-full items-center justify-around rounded-full border border-white/25 bg-white/12 px-2 py-2 backdrop-blur-xl">
+      <div className="flex w-full items-center justify-around rounded-full border border-white/25 bg-white/12 px-1.5 py-1.5 backdrop-blur-xl">
         <NavBtn active={tab === 'card'} onClick={() => setTab('card')} icon="card" label={t('card')} />
         <button onClick={onPay} aria-label={t('pay')}
-          className="-mt-8 grid h-16 w-16 place-items-center rounded-full bg-white text-brand-deep shadow-lg active:scale-95 transition">
-          <Icon name="pay" className="w-7 h-7" />
+          className="-mt-6 grid h-14 w-14 place-items-center rounded-full bg-white text-brand-deep shadow-md active:scale-95 transition">
+          <Icon name="send" className="w-6 h-6" />
         </button>
         <NavBtn active={tab === 'activity'} onClick={() => setTab('activity')} icon="activity" label={t('activity')} />
       </div>
@@ -83,8 +84,8 @@ export function BottomBar({ tab, setTab, lang, onPay }: { tab: string; setTab: (
 }
 function NavBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: string; label: string }) {
   return (
-    <button onClick={onClick} className={`flex w-20 flex-col items-center gap-0.5 rounded-2xl py-1.5 text-[11px] font-semibold transition ${active ? 'text-white' : 'text-white/60'}`}>
-      <Icon name={icon} className="w-6 h-6" />
+    <button onClick={onClick} className={`flex w-16 flex-col items-center gap-0.5 rounded-xl py-1 text-[10px] font-semibold transition ${active ? 'text-white' : 'text-white/60'}`}>
+      <Icon name={icon} className="w-5 h-5" />
       <span>{label}</span>
     </button>
   );

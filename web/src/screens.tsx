@@ -323,7 +323,7 @@ export function Withdraw() {
 
 // ── 5. Keypad home (Pay) ─────────────────────────────────────────────────────
 export function KeypadHome() {
-  const { lang, balance, go, showToast, setDraftAmountMinor } = useApp();
+  const { lang, go, showToast, setDraftAmountMinor } = useApp();
   const t = makeT(lang);
   const [entry, setEntry] = useState('');
   const press = (k: string) => {
@@ -339,13 +339,11 @@ export function KeypadHome() {
   };
   return (
     <div className="flex min-h-[70vh] flex-col px-1 pb-28">
-      <div className="mb-2 flex items-center justify-between">
-        <div className="rounded-full border border-white/30 bg-white/10 px-3 py-1.5 text-[12px] font-semibold backdrop-blur">
-          <Money minor={balance?.availableMinor ?? 0} />
-        </div>
-        <div className="flex items-center gap-1.5 rounded-full border border-white/30 bg-white/10 px-3 py-1.5 text-[11px] font-semibold backdrop-blur">
-          <Icon name="wifi" className="h-3.5 w-3.5" /> {t('meshOnline')}
-        </div>
+      <div className="mb-2 flex items-center justify-end">
+        <button onClick={() => go('manageCard')} aria-label={lang === 'ar' ? 'الحساب' : 'Account'}
+          className="grid h-10 w-10 place-items-center rounded-full border border-white/30 bg-white/15 backdrop-blur active:scale-95">
+          <Icon name="user" className="w-5 h-5" />
+        </button>
       </div>
 
       <div className="my-6 text-center">
