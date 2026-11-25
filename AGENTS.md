@@ -29,6 +29,9 @@ npx tsc --noEmit                   # must be clean
 Open **`http://127.0.0.1:8791/app`** for the React wallet (sign in with a
 **Dev user id**: `test-alice` / `test-bob` / `test-carol` / `test-dina`).
 
+Production hostname: **`pay.miirra.com`** (custom-domain route in
+`wrangler.toml`; provisioned on the first `wrangler deploy`).
+
 Env (`.dev.vars`): `DATABASE_URL` (Neon pooled), `AUTH_DEV_MODE=1`,
 `LYPAY_BASE_URL=http://127.0.0.1:8799` + `LYPAY_TOKEN=mock-token`,
 `LEDGER_MODE=mock`, `LYPAY_WEBHOOK_SECRET=mock-webhook-secret`,

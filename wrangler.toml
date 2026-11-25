@@ -4,6 +4,14 @@ compatibility_date = "2026-09-01"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
+# Custom domain — serves the Miirra Pay worker + React SPA at pay.miirra.com.
+# `custom_domain = true` makes Cloudflare provision the hostname + TLS cert and
+# the DNS record automatically on the next `wrangler deploy` (nothing is
+# deployed by adding this — it only wires the route).
+routes = [
+  { pattern = "pay.miirra.com", custom_domain = true }
+]
+
 # Miirra Pay is its OWN worker — deliberately not mounted inside miirra-api.
 # It owns the payment rail (LYPay), the Neon ledger of record, and the
 # TigerBeetle bridge binding. It shares the same Neon database cluster as the
