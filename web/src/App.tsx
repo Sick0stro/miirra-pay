@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AppProvider, useApp } from './store';
 import { api } from './lib';
 import { TopBar, BottomBar, BiometricModal, Toast } from './ui';
+import { clerkConfigured, ClerkGate } from './clerk';
 import {
   CardHome, TopUp, ScanIban, ManageCard, Withdraw, KeypadHome, ScanQr,
   Recipient, Review, Confirm, ActivityFeed, Receipt, Checkout,
@@ -88,7 +89,7 @@ function Shell() {
 
 function Inner() {
   const { authed, flow, confirmBiometric, cancelFlow, lang, toast } = useApp();
-  if (!authed) return <Gate />;
+  if (!authed) return clerkConfigured() ? <ClerkGate /> : <Gate />;
   return (
     <>
       <Shell />

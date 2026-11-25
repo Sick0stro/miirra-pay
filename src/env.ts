@@ -77,6 +77,14 @@ export type AppEnv = {
     // ── Static assets (the React SPA in web/dist) ──────────────────────────
     /** Cloudflare ASSETS binding — serves the built Miirra Pay SPA. */
     ASSETS: Fetcher;
+
+    // ── Clerk (phone OTP auth) — server-side token verification ────────────
+    /** Clerk JWKS URL, e.g. https://<domain>/.well-known/jwks.json */
+    CLERK_JWKS_URL?: string;
+    /** Expected issuer (Clerk instance domain / FAPI), e.g. https://<domain> */
+    CLERK_ISSUER?: string;
+    /** Expected audience, if the session token is audience-scoped. */
+    CLERK_AUDIENCE?: string;
   };
   Variables: {
     auth: AuthUser;

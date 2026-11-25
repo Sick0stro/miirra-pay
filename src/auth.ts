@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 
 import { getDb } from './db';
 import { unauthorized } from './errors';
+import { clerkConfigFromEnv, looksLikeJwt, verifyClerkToken } from './clerk-auth';
 
 /**
  * Session verification — identical model to miirra-api.
@@ -93,6 +94,19 @@ export const resolveAuth = async (c: Context): Promise<AuthUser> => {
 
   const token = bearerToken(c);
   if (!token) throw unauthorized('Missing bearer token');
+
+  // Clerk session JWT (phone OTP sign-in) — verify against Clerk's JWKS.
+  const cfg = clerkConfigFromEnv(c.env as never);
+  if (cfg && looksLikeJwt(token)) {
+    const clerkUser = await verifyClerkToken(token, cfg).catch(() => null);
+    if (clerkUser) {
+      cache.set(token, { user: clerkUser, exp: Date.now() + CACHE_TTL_MS });
+      c.set('auth', clerkUser);
+      return clerkUser;
+    }
+  }
+
+  // Better Auth session (identity server) — the original path.
   const user = await verifySession(c, token);
   if (!user) throw unauthorized('Invalid or expired session');
   c.set('auth', user);

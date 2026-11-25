@@ -178,6 +178,22 @@ It is a **view over this worker's own JSON API** — every server-side control
   dev faucet (`src/routes/dev.ts`, 403 unless `AUTH_DEV_MODE=1`). Sign in at
   `/app` with Dev user id `test-alice` / `test-bob` / `test-carol` / `test-dina`.
 
+## Clerk phone auth (optional, production login)
+
+The SPA supports **Clerk phone-OTP sign-up/login**. It activates only when a
+publishable key is present; otherwise the dev-id gate is used (local).
+
+- **Frontend:** set `VITE_CLERK_PUBLISHABLE_KEY` (web/.env) → `ClerkProvider` +
+  `<SignIn>`/`<SignUp>` (phone). On success the SPA sends the Clerk session JWT
+  as the Bearer token.
+- **Worker:** set secrets `CLERK_JWKS_URL` (e.g. `https://<domain>/.well-known/jwks.json`)
+  and `CLERK_ISSUER` (`https://<domain>`); `src/clerk-auth.ts` verifies the JWT
+  against JWKS (WebCrypto) and maps `sub` → platform user id. Better Auth tokens
+  still work via the DB path.
+- **Clerk dashboard:** enable **Phone number** (User & Authentication → Email,
+  Phone, Username) and configure an SMS provider; create an instance to get the
+  publishable key + domain.
+
 ## CBL compliance layer (2026-11-24)
 
 Regulatory guardrails against the CBL Electronic Payment Services Regulation
