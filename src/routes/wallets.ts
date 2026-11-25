@@ -235,7 +235,8 @@ walletsRoute.get('/activity', requireAuth, async (c) => {
     return {
       id: row.id,
       kind:
-        row.transaction_type === 'P2P' ? 'wallet_transfer'
+        row.idempotency_key?.startsWith('faucet:') ? 'topup'
+        : row.transaction_type === 'P2P' ? 'wallet_transfer'
         : row.transaction_type === 'M2M' ? 'merchant_payment'
         : row.transaction_type === 'M2P' ? 'refund'
         : row.transaction_type === 'P2M' ? 'merchant_payment'

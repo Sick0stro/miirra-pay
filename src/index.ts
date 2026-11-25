@@ -16,6 +16,7 @@ import { withdrawalsRoute } from './routes/withdrawals';
 import { complianceRoute } from './routes/compliance';
 import { healthRoute } from './routes/health';
 import { appRoute } from './routes/app';
+import { devRoute } from './routes/dev';
 
 /**
  * Miirra Pay — the LYD payments worker.
@@ -78,5 +79,8 @@ app.route('/api/verifications', verificationsRoute);
 app.route('/api/wallets', walletsRoute);
 app.route('/api/withdrawals', withdrawalsRoute);
 app.route('/api/compliance', complianceRoute);
+
+// Dev-only helpers (faucet for test accounts). 403 unless AUTH_DEV_MODE=1.
+app.route('/api/dev', devRoute);
 
 export default app;

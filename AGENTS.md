@@ -60,6 +60,10 @@ Production adds: `DIDIT_API_KEY`, `DIDIT_WEBHOOK_SECRET`, `DIDIT_WORKFLOW_ID`,
   SDD/CDD/EDD tier caps, agent tiers, Africa/Tripoli day boundary, escalation SLA.
 - `src/topup-rails.ts` — modular top-up rails (`integrated` / `coming_soon`).
 - `tests/ui-smoke.mjs` — 21-check smoke test for the wallet page + balance/activity.
+- `src/routes/dev.ts` — DEV-ONLY faucet (`POST /api/dev/faucet`, 403 unless
+  `AUTH_DEV_MODE=1`) that mints a starting balance for a test account by writing
+  the same posted binding a real credit writes.
+- `scripts/seed-test-accounts.mjs` — funds the demo cast via the faucet.
 - `ledger-service.mjs` — standalone TigerBeetle **bridge** (native
   `tigerbeetle-node` + authenticated HTTP surface). Runs where native addons
   can (a VM/container next to the cluster), NOT in the Worker.
@@ -149,6 +153,14 @@ the UI cannot bypass a rule.
 - Screens: balance card (available + pending + source), quick actions
   (Send / Top up / Withdraw / Scan), modular top-up rails, activity feed,
   bottom tab bar, and action sheets for each flow. EN/AR toggle with full RTL.
+- **Visual system = Miirra brand** (`miirra-web/DESIGN.md`): `#5491e0 → #cee0f1`
+  blue gradient canvas, frosted-glass cards (`white/10` + `white/25` border +
+  blur), **white pill** primary buttons (never blue buttons), white text on the
+  opacity ladder, Inter. The gradient is deepened at the far edge (`#9cc0ea`) so
+  white text stays readable over a full mobile screen.
+- Test accounts (dev only): run `node scripts/seed-test-accounts.mjs`, then sign
+  in at `/app` with a **Dev user id** — `test-alice`, `test-bob`, `test-carol`,
+  `test-dina` (funded with different balances). Requires `AUTH_DEV_MODE=1`.
 - Endpoints it consumes: `GET /api/wallets/balance`,
   `GET /api/wallets/activity`, `GET /api/topups/rails`,
   `POST /api/wallets/transfer`, `POST /api/topups/initiate`,
