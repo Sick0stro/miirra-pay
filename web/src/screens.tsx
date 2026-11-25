@@ -90,6 +90,7 @@ export function TopUp() {
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const [iban, setIban] = useState('');
+  const [result, setResult] = useState<{ ref: string; minor: number } | null>(null);
 
   const quick = [20, 50, 100, 250];
   const doTopup = async () => {
@@ -99,10 +100,36 @@ export function TopUp() {
     try {
       const r = await api.topup({ idempotencyKey: newIdem('topup'), amountMinor: minor, rail: mode === 'bank' ? 'bank_transfer' : 'peer_mesh_receive' });
       if (mode === 'bank' && iban) setLinkedIban(iban);
-      showToast(t('copied'));
-      go('home');
+      // Real bank top-up: show the deposit reference the user must quote on the
+      // transfer. The credit lands when LYPay matches the inbound payment.
+      setResult({ ref: r.depositReference || r.id, minor });
     } catch (e: any) { showToast(e.message); } finally { setBusy(false); }
   };
+
+  if (result) {
+    return (
+      <ScreenHeader title={t('topUp')} onBack={() => go('home')}>
+        <div className="rounded-3xl glass p-6 text-center">
+          <div className="mx-auto mb-3 grid h-16 w-16 place-items-center rounded-full bg-emerald-400/25 text-emerald-50"><Icon name="check" className="h-9 w-9" /></div>
+          <div className="text-[15px] font-semibold">{lang === 'ar' ? 'تم إنشاء طلب الشحن' : 'Top-up created'}</div>
+          <Money minor={result.minor} className="mt-1 block text-[34px] font-extrabold tracking-tight" />
+          <div className="mt-4 rounded-2xl bg-white/10 p-4">
+            <div className="text-[12px] text-white/70">{lang === 'ar' ? 'اكتب هذا المرجع عند التحويل' : 'Quote this reference on your transfer'}</div>
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <span className="truncate font-mono text-[15px] font-bold" dir="ltr">{result.ref}</span>
+              <button onClick={() => { navigator.clipboard?.writeText(result.ref); showToast(t('copied')); }} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/15"><Icon name="copy" className="h-4 w-4" /></button>
+            </div>
+            <div className="mt-2 text-[11px] text-white/60" dir="ltr">{DEPOSIT_IBAN}</div>
+          </div>
+          <p className="mt-3 text-[12px] text-white/70">{lang === 'ar' ? 'يُضاف الرصيد تلقائياً عند مطابقة التحويل البنكي الوارد.' : 'Your balance is credited automatically when the bank transfer is matched.'}</p>
+        </div>
+        <div className="mt-5 flex gap-3">
+          <button onClick={() => { setResult(null); setAmount(''); }} className="flex flex-1 items-center justify-center gap-2 rounded-full border border-white/40 bg-white/10 py-3 text-[14px] font-semibold"><Icon name="plus" className="h-4 w-4" />{lang === 'ar' ? 'شحن آخر' : 'New top-up'}</button>
+          <button onClick={() => go('home')} className="pill-white flex-1 rounded-full py-3 text-[14px] font-bold">{t('done')}</button>
+        </div>
+      </ScreenHeader>
+    );
+  }
 
   return (
     <ScreenHeader title={t('topUp')} onBack={() => go('home')}>
