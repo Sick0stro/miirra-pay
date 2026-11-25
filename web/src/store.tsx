@@ -84,7 +84,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [activity, setActivity] = useState<Activity[]>([]);
   const [rails, setRails] = useState<Rail[]>([]);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<Tab>('card');
+  const [tab, setTab] = useState<Tab>('pay');
   const [route, setRoute] = useState<Route>('home');
   const [cardTier, setCardTier] = useState<'standard' | 'plus' | 'max'>('standard');
   const [frozen, setFrozen] = useState(false);
