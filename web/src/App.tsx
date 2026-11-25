@@ -79,7 +79,7 @@ function Shell() {
   const showBar = route === 'home';
   return (
     <div className="mx-auto min-h-full max-w-[460px] px-4">
-      <TopBar lang={lang} onToggleLang={() => setLang(lang === 'ar' ? 'en' : 'ar')} />
+      <TopBar />
       <div key={route + tab} className="fade-in">{screen}</div>
       {showBar && <BottomBar tab={tab} setTab={(t) => { setTab(t); go('home'); }} lang={lang} onPay={() => { setTab('pay'); go('home'); }} />}
     </div>

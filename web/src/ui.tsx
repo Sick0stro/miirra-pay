@@ -59,23 +59,9 @@ export function Sheet({ open, onClose, children, title }: { open: boolean; onClo
   );
 }
 
-// ── Top bar ──────────────────────────────────────────────────────────────────
-export function TopBar({ lang, onToggleLang }: { lang: Lang; onToggleLang: () => void }) {
-  return (
-    <header className="flex items-center justify-between px-1 pt-[calc(6px+env(safe-area-inset-top))] pb-4">
-      <div className="flex items-center gap-2.5">
-        <div className="grid h-9 w-9 place-items-center rounded-xl border border-white/30 bg-white/15 text-lg font-black backdrop-blur">M</div>
-        <div className="leading-tight">
-          <div className="font-extrabold tracking-tight">Miirra Pay</div>
-          <div className="text-[11px] font-medium text-white/70">LYD WALLET</div>
-        </div>
-      </div>
-      <button onClick={onToggleLang}
-        className="rounded-full border border-white/30 bg-white/10 px-3.5 py-2 text-[13px] font-semibold backdrop-blur">
-        {lang === 'ar' ? 'English' : 'العربية'}
-      </button>
-    </header>
-  );
+// ── Top bar (minimal — brand lives in the account area, not the header) ───────
+export function TopBar() {
+  return <header className="pt-[calc(6px+env(safe-area-inset-top))] pb-2" />;
 }
 
 // ── Bottom navigation (strictly 3) ───────────────────────────────────────────

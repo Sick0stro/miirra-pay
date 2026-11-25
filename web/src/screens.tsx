@@ -194,7 +194,7 @@ export function ScanIban() {
 
 // ── 4. Manage card ───────────────────────────────────────────────────────────
 export function ManageCard() {
-  const { lang, go, frozen, setFrozen, cardTier } = useApp();
+  const { lang, setLang, go, frozen, setFrozen, cardTier } = useApp();
   const t = makeT(lang);
   return (
     <ScreenHeader title={lang === 'ar' ? 'إدارة البطاقة' : 'Manage card'} onBack={() => go('home')}>
@@ -220,6 +220,15 @@ export function ManageCard() {
       <div className="mt-3 grid grid-cols-2 gap-3">
         <Info label={lang === 'ar' ? 'الحد اليومي' : 'Daily limit'} value="5,000.00 LYD" />
         <Info label={lang === 'ar' ? 'الخطة' : 'Plan'} value={cardTier === 'standard' ? t('standard') : cardTier === 'plus' ? t('plus') : t('max')} />
+      </div>
+
+      {/* Language / account setting (moved out of the app header) */}
+      <div className="mt-3 flex items-center justify-between rounded-2xl glass p-4">
+        <div className="text-[14px] font-semibold">{lang === 'ar' ? 'اللغة' : 'Language'}</div>
+        <div className="flex gap-1 rounded-full border border-white/25 bg-white/10 p-1">
+          <button onClick={() => setLang('en')} className={`rounded-full px-3 py-1 text-[12px] font-semibold ${lang === 'en' ? 'bg-white text-brand-deep' : 'text-white/80'}`}>English</button>
+          <button onClick={() => setLang('ar')} className={`rounded-full px-3 py-1 text-[12px] font-semibold ${lang === 'ar' ? 'bg-white text-brand-deep' : 'text-white/80'}`}>العربية</button>
+        </div>
       </div>
     </ScreenHeader>
   );
