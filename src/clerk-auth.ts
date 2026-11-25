@@ -82,15 +82,29 @@ export async function verifyClerkToken(token: string, cfg: ClerkConfig): Promise
   const sub = payload.sub;
   if (!sub || typeof sub !== 'string') return null;
 
+  // Only RS256 (RSA + SHA-256) is supported; WebCrypto names it RSASSA-PKCS1-v1_5.
+  if (header.alg !== 'RS256') return null;
+
   // Verify signature against the matching JWK.
   const keys = await loadJwks(cfg.jwksUrl);
   const jwk = keys.find((k) => k.kid === header.kid) || keys[0];
   if (!jwk) return null;
 
-  const key = await crypto.subtle.importKey('jwk', jwk, { name: 'RS256', hash: 'SHA-256' }, false, ['verify']);
+  const key = await crypto.subtle.importKey(
+    'jwk',
+    jwk,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['verify'],
+  );
   const [h, p, s] = token.split('.');
   const sig = b64urlDecode(s!);
-  const okSig = await crypto.subtle.verify('RS256', key, sig, new TextEncoder().encode(`${h}.${p}`));
+  const okSig = await crypto.subtle.verify(
+    { name: 'RSASSA-PKCS1-v1_5' },
+    key,
+    sig,
+    new TextEncoder().encode(`${h}.${p}`),
+  );
   if (!okSig) return null;
 
   const email = payload.email || payload.email_address || null;
