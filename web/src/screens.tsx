@@ -8,10 +8,11 @@ const DEPOSIT_IBAN = 'LY00 0000 0000 0000 0000 0000'; // platform receiving IBAN
 
 // ── 1. Card home ─────────────────────────────────────────────────────────────
 export function CardHome() {
-  const { lang, balance, cardTier, setCardTier, frozen, setFrozen, go, setTab, showToast } = useApp();
+  const { lang, balance, cardTier, frozen, setFrozen, go, setTab, userName, activity, openReceipt } = useApp();
   const t = makeT(lang);
-  const [showMax, setShowMax] = useState(false);
   const avail = balance?.availableMinor ?? 0;
+  const qrValue = `miirra-pay:/@${userName}`;
+  const recent = activity.slice(0, 6);
   return (
     <div className="px-1 pb-28">
       <div className="mb-4 flex items-end justify-between">
@@ -34,7 +35,7 @@ export function CardHome() {
         </button>
       </div>
 
-      <MiirraCard tier={cardTier} holder="SAMI ABDALLA" frozen={frozen} lang={lang} />
+      <MiirraCard tier={cardTier} holder={userName.toUpperCase()} frozen={frozen} lang={lang} qrValue={qrValue} />
 
       <div className="mt-3 flex items-center justify-center gap-2">
         <button onClick={() => setFrozen(!frozen)} className="flex items-center gap-1.5 rounded-full border border-white/30 bg-white/10 px-3 py-1.5 text-[12px] font-semibold backdrop-blur">
@@ -45,17 +46,19 @@ export function CardHome() {
         </button>
       </div>
 
-      {/* Tier selector */}
+      {/* Activity merged into the Card page (plans moved to the profile) */}
       <div className="mt-6">
-        <div className="mb-2 px-1 text-[13px] font-semibold text-white/80">{lang === 'ar' ? 'اختر خطتك' : 'Your plan'}</div>
-        <div className="grid grid-cols-2 gap-3">
-          <TierCard tier="standard" active={cardTier === 'standard'} onClick={() => setCardTier('standard')} lang={lang} />
-          <TierCard tier="plus" active={cardTier === 'plus'} onClick={() => setCardTier('plus')} lang={lang} />
+        <div className="mb-2 flex items-center justify-between px-1">
+          <span className="text-[13px] font-semibold text-white/80">{t('activity')}</span>
+          <button onClick={() => setTab('activity')} className="text-[12px] font-semibold text-white/70">{lang === 'ar' ? 'الكل' : 'View all'}</button>
         </div>
-        <button onClick={() => setShowMax((s) => !s)} className="mt-2 flex w-full items-center justify-between rounded-2xl border border-white/25 bg-white/10 px-4 py-3 text-[13px] font-semibold backdrop-blur">
-          <span>{t('needMore')}</span><Icon name="chevron" className={`h-4 w-4 transition ${showMax ? 'rotate-90' : ''}`} />
-        </button>
-        {showMax && <div className="mt-2"><TierCard tier="max" active={cardTier === 'max'} onClick={() => setCardTier('max')} lang={lang} /></div>}
+        <div className="space-y-2">
+          {recent.map((a) => (
+            <ActivityRow key={a.id} a={a} lang={lang}
+              onClick={() => openReceipt({ step: 'done', amountMinor: a.amountMinor, recipient: { name: a.counterparty?.name || a.reference }, note: '', source: 'keypad' })} />
+          ))}
+          {recent.length === 0 && <div className="py-6 text-center text-[13px] text-white/60">{t('noActivity')}</div>}
+        </div>
       </div>
     </div>
   );
@@ -221,11 +224,17 @@ export function ScanIban() {
 
 // ── 4. Manage card ───────────────────────────────────────────────────────────
 export function ManageCard() {
-  const { lang, setLang, go, frozen, setFrozen, cardTier } = useApp();
+  const { lang, setLang, go, frozen, setFrozen, cardTier, setCardTier, userName } = useApp();
   const t = makeT(lang);
+  const [showMax, setShowMax] = useState(false);
   return (
-    <ScreenHeader title={lang === 'ar' ? 'إدارة البطاقة' : 'Manage card'} onBack={() => go('home')}>
-      <div className="rounded-2xl glass p-5 text-center">
+    <ScreenHeader title={lang === 'ar' ? 'الحساب والبطاقة' : 'Account & card'} onBack={() => go('home')}>
+      <div className="rounded-2xl glass p-4">
+        <div className="text-[12px] text-white/70">{lang === 'ar' ? 'الحساب' : 'Account'}</div>
+        <div className="mt-0.5 text-[16px] font-bold">{userName}</div>
+      </div>
+
+      <div className="mt-3 rounded-2xl glass p-5 text-center">
         <div className="mx-auto mb-3 grid h-16 w-16 place-items-center rounded-full bg-white/15"><Icon name="card" className="h-8 w-8" /></div>
         <div className="text-[13px] text-white/70">{lang === 'ar' ? 'اربط بطاقة فعلية' : 'Pair a physical card'}</div>
         <div className="mt-3 flex gap-2">
@@ -234,7 +243,7 @@ export function ManageCard() {
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-between rounded-2xl glass p-4">
+      <div className="mt-3 flex items-center justify-between rounded-2xl glass p-4">
         <div>
           <div className="text-[14px] font-semibold">{lang === 'ar' ? 'حالة البطاقة' : 'Card status'}</div>
           <div className="text-[12px] text-white/70">{frozen ? t('frozen') : (lang === 'ar' ? 'نشطة' : 'Active')}</div>
@@ -242,6 +251,19 @@ export function ManageCard() {
         <button onClick={() => setFrozen(!frozen)} className={`relative h-8 w-14 rounded-full transition ${frozen ? 'bg-white/30' : 'bg-brand'}`}>
           <span className={`absolute top-1 h-6 w-6 rounded-full bg-white transition-all ${frozen ? 'start-1' : 'end-1'}`} />
         </button>
+      </div>
+
+      {/* Miirra plans (moved here from the Card page) */}
+      <div className="mt-5">
+        <div className="mb-2 px-1 text-[13px] font-semibold text-white/80">{lang === 'ar' ? 'خطط ميرا' : 'Miirra plans'}</div>
+        <div className="grid grid-cols-2 gap-3">
+          <TierCard tier="standard" active={cardTier === 'standard'} onClick={() => setCardTier('standard')} lang={lang} />
+          <TierCard tier="plus" active={cardTier === 'plus'} onClick={() => setCardTier('plus')} lang={lang} />
+        </div>
+        <button onClick={() => setShowMax((s) => !s)} className="mt-2 flex w-full items-center justify-between rounded-2xl border border-white/25 bg-white/10 px-4 py-3 text-[13px] font-semibold backdrop-blur">
+          <span>{t('needMore')}</span><Icon name="chevron" className={`h-4 w-4 transition ${showMax ? 'rotate-90' : ''}`} />
+        </button>
+        {showMax && <div className="mt-2"><TierCard tier="max" active={cardTier === 'max'} onClick={() => setCardTier('max')} lang={lang} /></div>}
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3">

@@ -71,6 +71,8 @@ interface AppState {
   // A pending amount carried from the keypad/QR into the recipient picker.
   draftAmountMinor: number;
   setDraftAmountMinor: (n: number) => void;
+
+  userName: string;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -93,6 +95,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [lastReceipt, setLastReceipt] = useState<Flow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [draftAmountMinor, setDraftAmountMinor] = useState(0);
+  const [userName, setUserName] = useState('Miirra user');
   const toastTimer = useRef<number | undefined>(undefined);
 
   const setLang = (l: Lang) => { setLangState(l); localStorage.setItem('mp_lang', l); };
@@ -122,7 +125,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (token: string, devUser: string) => {
     setAuth(token, devUser);
-    await api.me(); // throws on bad creds
+    const me = await api.me(); // throws on bad creds
+    setUserName(me.name || me.email || 'Miirra user');
     setAuthed(true);
   };
   const signOut = () => { setAuth('', ''); setAuthed(false); setBalance(null); setActivity([]); };
@@ -200,7 +204,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     flow, initiatePayment, completeSwipe, confirmBiometric, cancelFlow, lastReceipt, openReceipt,
     toast, showToast,
     draftAmountMinor, setDraftAmountMinor,
-  }), [lang, authed, balance, activity, rails, loading, tab, route, cardTier, frozen, linkedIban, flow, lastReceipt, toast, draftAmountMinor]);
+    userName,
+  }), [lang, authed, balance, activity, rails, loading, tab, route, cardTier, frozen, linkedIban, flow, lastReceipt, toast, draftAmountMinor, userName]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

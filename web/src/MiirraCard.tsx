@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import type { Lang } from './lib';
 
 export type Tier = 'standard' | 'plus' | 'max';
@@ -24,7 +25,7 @@ const TIER: Record<Tier, { badge: { en: string; ar: string }; sub: { en: string;
   },
 };
 
-export function MiirraCard({ tier, holder, frozen, lang }: { tier: Tier; holder: string; frozen: boolean; lang: Lang }) {
+export function MiirraCard({ tier, holder, frozen, lang, qrValue }: { tier: Tier; holder: string; frozen: boolean; lang: Lang; qrValue?: string }) {
   const [flipped, setFlipped] = useState(false);
   const ar = lang === 'ar';
   const cfg = TIER[tier];
@@ -65,7 +66,7 @@ export function MiirraCard({ tier, holder, frozen, lang }: { tier: Tier; holder:
             style={{ background: 'repeating-linear-gradient(90deg,#05070b 0 14px,#0f172a 14px 28px,#05070b 28px 42px)' }} />
           <div className="flex items-center gap-3.5 px-5 pt-3.5 text-white">
             <div className="h-[74px] w-[74px] shrink-0 rounded-[10px] bg-white p-1.5">
-              <QrGrid />
+              {qrValue ? <QRCodeSVG value={qrValue} size={60} bgColor="#ffffff" fgColor="#0f172a" level="M" /> : <QrGrid />}
             </div>
             <div className="min-w-0">
               <div className={`text-[10px] font-bold tracking-wide ${tier === 'max' ? 'text-amber-400' : 'text-sky-400'}`}>{cfg.badge[lang]}</div>
