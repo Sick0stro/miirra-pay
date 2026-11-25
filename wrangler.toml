@@ -12,3 +12,11 @@ workers_dev = true
 
 [observability]
 enabled = true
+
+# The React SPA (web/dist) is served from this binding. Build it first:
+#   cd web && npm install && npm run build
+# Unknown non-API paths fall through to the Worker, which returns index.html.
+[assets]
+directory = "./web/dist"
+not_found_handling = "single-page-application"
+binding = "ASSETS"

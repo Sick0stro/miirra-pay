@@ -431,7 +431,11 @@ walletsRoute.post('/transfer', requireAuth, async (c) => {
 
   // Face verification gate: above 1,000 LYD requires a Didit session marked
   // approved for this user. We check a vendor_verifications row for the user.
-  if (needsFaceVerification(body.amountMinor)) {
+  // DEV ONLY: AUTH_DEV_MODE=1 + diditSessionId 'dev-biometric-approved' stands
+  // in for a real biometric so the local demo can settle >1,000 LYD. Production
+  // (no AUTH_DEV_MODE) always requires a real approved Didit session.
+  const devBiometric = c.env.AUTH_DEV_MODE === '1' && body.diditSessionId === 'dev-biometric-approved';
+  if (needsFaceVerification(body.amountMinor) && !devBiometric) {
     if (!body.diditSessionId) {
       throw badRequest(`Transfers above ${formatLyd(1000 * 100)} require face verification`, 'face_verification_required');
     }

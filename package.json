@@ -13,7 +13,9 @@
     "mock:lypay": "node tests/mock-lypay.mjs",
     "test:e2e": "node tests/e2e.mjs",
     "eval:cbl": "node evals/cbl/run_all_evals.mjs",
-    "test:mesh": "node --experimental-strip-types mesh/mesh-adapter.test.mjs"
+    "test:mesh": "node --experimental-strip-types mesh/mesh-adapter.test.mjs",
+    "build:web": "cd web && npm install --no-audit --no-fund && npm run build",
+    "dev:web": "cd web && npm run dev"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",

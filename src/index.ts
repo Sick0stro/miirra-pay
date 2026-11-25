@@ -15,7 +15,6 @@ import { walletsRoute } from './routes/wallets';
 import { withdrawalsRoute } from './routes/withdrawals';
 import { complianceRoute } from './routes/compliance';
 import { healthRoute } from './routes/health';
-import { appRoute } from './routes/app';
 import { devRoute } from './routes/dev';
 
 /**
@@ -58,9 +57,6 @@ app.onError((err, c) => {
 // Dependency-aware health (NeonDB + TigerBeetle bridge), no secret exposure.
 app.route('/', healthRoute);
 
-// The wallet front end (self-contained page; talks only to this worker's API).
-app.route('/', appRoute);
-
 // Who am I — proves the auth path works and gives the client its user id.
 app.get('/v1/me', requireAuth, (c) => {
   const u = userOf(c);
@@ -82,5 +78,18 @@ app.route('/api/compliance', complianceRoute);
 
 // Dev-only helpers (faucet for test accounts). 403 unless AUTH_DEV_MODE=1.
 app.route('/api/dev', devRoute);
+
+// ── SPA fallback ────────────────────────────────────────────────────────────
+// The React app (web/dist) is served from the ASSETS binding. Requests that
+// reach the Worker (i.e. not a static asset) and are not an API/webhook/health
+// route get index.html, so client-side routes like /app or /pay resolve.
+app.all('*', async (c) => {
+  const p = new URL(c.req.url).pathname;
+  if (p.startsWith('/api') || p.startsWith('/webhooks') || p.startsWith('/v1') || p === '/health') {
+    return c.notFound();
+  }
+  const url = new URL('/index.html', c.req.url);
+  return c.env.ASSETS.fetch(new Request(url, c.req.raw));
+});
 
 export default app;

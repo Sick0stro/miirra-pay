@@ -17,12 +17,17 @@ Better Auth sessions for identity; owns the LYPay rail + TigerBeetle ledger.
 ```bash
 npm install
 node scripts/migrate.mjs           # apply schema (ws Pool driver; idempotent)
+node scripts/seed-test-accounts.mjs # fund test-alice/bob/carol/dina (dev faucet)
+npm run build:web                  # build the React SPA → web/dist (served by the worker)
 npx wrangler dev --port 8791       # ALWAYS 8791 (8790 = miirra-api, 8787 = partner agent)
 node tests/mock-lypay.mjs          # standalone mock LYPay on :8799 (separate shell)
 node tests/e2e.mjs                 # full E2E suite → 31/31 green
-node tests/ui-smoke.mjs            # wallet UI + balance/activity smoke → 21/21
+node tests/ui-smoke.mjs            # wallet API smoke → 21/21
 npx tsc --noEmit                   # must be clean
 ```
+
+Open **`http://127.0.0.1:8791/app`** for the React wallet (sign in with a
+**Dev user id**: `test-alice` / `test-bob` / `test-carol` / `test-dina`).
 
 Env (`.dev.vars`): `DATABASE_URL` (Neon pooled), `AUTH_DEV_MODE=1`,
 `LYPAY_BASE_URL=http://127.0.0.1:8799` + `LYPAY_TOKEN=mock-token`,
@@ -76,7 +81,7 @@ Production adds: `DIDIT_API_KEY`, `DIDIT_WEBHOOK_SECRET`, `DIDIT_WORKFLOW_ID`,
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | NeonDB + TigerBeetle bridge readiness (no secrets) |
-| GET | `/app` | **the wallet front end** (self-contained page; root `/` redirects here) |
+| GET | `/app` | **the wallet front end** (React SPA from `web/dist`; `/` serves it too) |
 | GET | `/v1/me` | whoami (proves auth) |
 | GET | `/api/wallets/balance` | caller's LYD balance (ledger-first, DB projection fallback) |
 | GET | `/api/wallets/activity` | caller's money-movement feed (from ledger bindings) |
@@ -138,33 +143,37 @@ Retries are safe: a re-posted pending returns `exists` /
   confirm body keys are camelCase (`paymentReference`, `transactionTimestamp`).
 ## Wallet front end (`/app`)
 
-A single self-contained page served by the worker (`src/routes/app.ts`) — no
-build step, no framework. It is a **view over this worker's own JSON API**, so
-every server-side control (tier caps, face gate, AML, CBL perimeter) still runs;
-the UI cannot bypass a rule.
+A **React + TypeScript + Tailwind v4** SPA in `web/`, built to `web/dist` and
+served by the worker via the Cloudflare `ASSETS` binding (`[assets]` in
+`wrangler.toml`, `not_found_handling = "single-page-application"`). Unknown
+non-API paths fall through the Worker to `index.html` (see `src/index.ts`). In
+dev, `npm run dev:web` runs Vite on :5174 and proxies `/api` to :8791 for HMR.
+It is a **view over this worker's own JSON API** — every server-side control
+(tier caps, face gate, AML, CBL perimeter) still runs; the UI cannot bypass a rule.
 
-- Auth: stores a Better Auth bearer token in `localStorage` (`mp_token`) and
-  sends `Authorization: Bearer …`; in dev (`AUTH_DEV_MODE=1`) it falls back to
-  `x-dev-user` (`mp_devuser`) so the page works with no identity server. The
-  login gate appears when neither is set.
-- Money: LYD everywhere. Amounts are entered in major units and converted to
-  minor units in exactly ONE place (`toMinor`, 3-dp to match the LYPay rail);
-  the API speaks minor units. `fmtMinor` is the only formatter.
-- Screens: balance card (available + pending + source), quick actions
-  (Send / Top up / Withdraw / Scan), modular top-up rails, activity feed,
-  bottom tab bar, and action sheets for each flow. EN/AR toggle with full RTL.
-- **Visual system = Miirra brand** (`miirra-web/DESIGN.md`): `#5491e0 → #cee0f1`
-  blue gradient canvas, frosted-glass cards (`white/10` + `white/25` border +
-  blur), **white pill** primary buttons (never blue buttons), white text on the
-  opacity ladder, Inter. The gradient is deepened at the far edge (`#9cc0ea`) so
-  white text stays readable over a full mobile screen.
-- Test accounts (dev only): run `node scripts/seed-test-accounts.mjs`, then sign
-  in at `/app` with a **Dev user id** — `test-alice`, `test-bob`, `test-carol`,
-  `test-dina` (funded with different balances). Requires `AUTH_DEV_MODE=1`.
-- Endpoints it consumes: `GET /api/wallets/balance`,
-  `GET /api/wallets/activity`, `GET /api/topups/rails`,
-  `POST /api/wallets/transfer`, `POST /api/topups/initiate`,
-  `POST /api/withdrawals/initiate`.
+- **Strictly 3-button floating glass bottom bar**: Card · Pay · Activity.
+- **Screens (12):** Card home (balance, Add Cash/Cash Out, MiirraCard flip with
+  freeze + tier selector Standard/Miirra+/Max), Top-Up (Bank transfer LYPay/IBAN
+  copy+QR+Scan IBAN, or From another Miirra user), Camera IBAN scanner, Manage
+  card, Keypad Pay home, Scan QR (Scan/My QR), Recipient & note, Review (Slide to
+  Pay), Biometric/Face modal (>1,000 LYD), Confirmation, Activity feed +
+  receipt/mesh-sync, and a pay.miirra.com checkout approval sheet.
+- **One state machine** (`store.tsx` `initiatePayment`): every path (keypad, QR,
+  checkout, withdraw) runs Swipe → (`amount > 1000` ? native biometric : instant)
+  → confirm. The biometric modal is gated on `flow.step === 'biometric'` so it
+  cannot be skipped.
+- **Money**: LYD, 2-dp minor (100/LYD) to match `src/money.ts`; `toMinor`/`fmt`
+  live only in `web/src/lib.ts`.
+- **Withdraw**: same-account rule — requires the linked top-up IBAN and the user
+  types it to match before Slide to Pay enables.
+- **i18n**: EN/AR toggle flips `dir` and translates all labels; full RTL.
+- **Auth**: bearer token (`mp_token`) or dev `x-dev-user` (`mp_devuser`).
+- **Dev biometric bypass**: the UI sends `diditSessionId: 'dev-biometric-approved'`
+  and the worker honors it ONLY when `AUTH_DEV_MODE=1`, so >1,000 LYD settles
+  locally. Production (no dev mode) still requires a real approved Didit session.
+- Test accounts: `node scripts/seed-test-accounts.mjs` funds the demo cast via the
+  dev faucet (`src/routes/dev.ts`, 403 unless `AUTH_DEV_MODE=1`). Sign in at
+  `/app` with Dev user id `test-alice` / `test-bob` / `test-carol` / `test-dina`.
 
 ## CBL compliance layer (2026-11-24)
 

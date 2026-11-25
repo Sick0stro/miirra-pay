@@ -105,7 +105,9 @@ withdrawalsRoute.post('/initiate', requireAuth, async (c) => {
   if (!tierCheck.ok) {
     throw badRequest(tierCheck.reason, tierCheck.code);
   }
-  if (needsFaceVerification(body.amountMinor)) {
+  // DEV ONLY: see wallets.ts — a simulated biometric stands in for Didit locally.
+  const devBiometric = c.env.AUTH_DEV_MODE === '1' && body.diditSessionId === 'dev-biometric-approved';
+  if (needsFaceVerification(body.amountMinor) && !devBiometric) {
     if (!body.diditSessionId) {
       throw badRequest(`Withdrawals above ${formatLyd(1000 * 100)} require face verification`, 'face_verification_required');
     }

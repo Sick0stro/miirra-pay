@@ -73,6 +73,10 @@ export type AppEnv = {
     CBL_SANDBOX_USER_IDS?: string;
     /** The CBL-approved Libya region (e.g. 'ly-tripoli'); refuses off-shore. */
     CBL_APPROVED_REGION?: string;
+
+    // ── Static assets (the React SPA in web/dist) ──────────────────────────
+    /** Cloudflare ASSETS binding — serves the built Miirra Pay SPA. */
+    ASSETS: Fetcher;
   };
   Variables: {
     auth: AuthUser;

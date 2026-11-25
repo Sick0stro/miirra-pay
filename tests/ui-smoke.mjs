@@ -18,20 +18,20 @@ async function j(method, path, body, headers = H) {
 
 const RUN = Date.now().toString(36);
 
-console.log('\n1. GET /app serves the wallet page');
+console.log('\n1. GET /app serves the React wallet SPA');
 {
   const r = await fetch(BASE + '/app');
   const html = await r.text();
   ok('status 200', r.status === 200, 'got ' + r.status);
   ok('is HTML with Miirra Pay', /Miirra Pay/.test(html) && /<html/.test(html));
-  ok('embeds LYD currency', /LYD/.test(html));
-  ok('embeds the API calls', /\/api\/wallets\/balance/.test(html) && /\/api\/wallets\/transfer/.test(html));
+  ok('has the React root + module entry', /id="root"/.test(html) && /<script[^>]+module/.test(html));
 }
 
-console.log('\n2. GET / redirects to /app');
+console.log('\n2. GET / serves the SPA (no redirect)');
 {
   const r = await fetch(BASE + '/', { redirect: 'manual' });
-  ok('redirect to /app', r.status === 302 && (r.headers.get('location') || '').includes('/app'), 'got ' + r.status);
+  const html = await r.text();
+  ok('root serves the SPA index', r.status === 200 && /id="root"/.test(html), 'got ' + r.status);
 }
 
 console.log('\n3. GET /api/wallets/balance');

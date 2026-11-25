@@ -4,3 +4,6 @@ node_modules/
 .env
 *.log
 dist/
+# web build artifacts
+web/dist/
+*.tsbuildinfo
