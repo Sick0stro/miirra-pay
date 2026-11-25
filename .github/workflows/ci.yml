@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install worker deps
+        run: npm ci
+
+      - name: Worker typecheck
+        run: npx tsc --noEmit
+
+      - name: Mesh typecheck
+        run: npx tsc -p tsconfig.mesh.json --noEmit
+
+      - name: Mesh boundary tests
+        run: node --experimental-strip-types mesh/mesh-adapter.test.mjs
+
+      - name: Install web deps
+        working-directory: web
+        run: npm ci
+
+      - name: Build web SPA
+        working-directory: web
+        run: npm run build
