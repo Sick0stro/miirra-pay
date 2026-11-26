@@ -5,7 +5,7 @@ import { TopBar, BottomBar, BiometricModal, Toast } from './ui';
 import { clerkConfigured, ClerkGate } from './clerk';
 import {
   CardHome, TopUp, ScanIban, ManageCard, Withdraw, KeypadHome, ScanQr,
-  Recipient, Review, Confirm, ActivityFeed, Receipt, Checkout,
+  Recipient, Review, Confirm, Receipt, Checkout,
 } from './screens';
 
 function Gate() {
@@ -58,7 +58,6 @@ function Shell() {
   const screen = (() => {
     if (route === 'home') {
       if (tab === 'card') return <CardHome />;
-      if (tab === 'activity') return <ActivityFeed />;
       return <KeypadHome />;
     }
     switch (route) {

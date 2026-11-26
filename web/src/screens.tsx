@@ -8,11 +8,11 @@ const DEPOSIT_IBAN = 'LY00 0000 0000 0000 0000 0000'; // platform receiving IBAN
 
 // ── 1. Card home ─────────────────────────────────────────────────────────────
 export function CardHome() {
-  const { lang, balance, cardTier, frozen, setFrozen, go, setTab, userName, activity, openReceipt } = useApp();
+  const { lang, balance, cardTier, frozen, setFrozen, go, userName, activity, openReceipt } = useApp();
   const t = makeT(lang);
   const avail = balance?.availableMinor ?? 0;
   const qrValue = `miirra-pay:/@${userName}`;
-  const recent = activity.slice(0, 6);
+  const recent = activity;
   return (
     <div className="px-1 pb-28">
       <div className="mb-4 flex items-end justify-between">
@@ -46,12 +46,9 @@ export function CardHome() {
         </button>
       </div>
 
-      {/* Activity merged into the Card page (plans moved to the profile) */}
+      {/* Activity — the single unified feed (no separate Activity page) */}
       <div className="mt-6">
-        <div className="mb-2 flex items-center justify-between px-1">
-          <span className="text-[13px] font-semibold text-white/80">{t('activity')}</span>
-          <button onClick={() => setTab('activity')} className="text-[12px] font-semibold text-white/70">{lang === 'ar' ? 'الكل' : 'View all'}</button>
-        </div>
+        <div className="mb-2 px-1 text-[13px] font-semibold text-white/80">{t('activity')}</div>
         <div className="space-y-2">
           {recent.map((a) => (
             <ActivityRow key={a.id} a={a} lang={lang}

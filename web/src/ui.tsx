@@ -71,13 +71,17 @@ export function BottomBar({ tab, setTab, lang, onPay }: { tab: string; setTab: (
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-[420px] items-center justify-around px-4 pb-[calc(8px+env(safe-area-inset-bottom))] pt-1"
       style={{ background: 'linear-gradient(to top, rgba(84,145,224,.92), rgba(84,145,224,0))' }}>
-      <div className="flex w-full items-center justify-around rounded-full border border-white/25 bg-white/12 px-1.5 py-1.5 backdrop-blur-xl">
-        <NavBtn active={tab === 'card'} onClick={() => setTab('card')} icon="card" label={t('card')} />
-        <button onClick={onPay} aria-label={t('pay')}
-          className="-mt-6 grid h-14 w-14 place-items-center rounded-full bg-white text-brand-deep shadow-md active:scale-95 transition">
-          <Icon name="send" className="w-6 h-6" />
-        </button>
-        <NavBtn active={tab === 'activity'} onClick={() => setTab('activity')} icon="activity" label={t('activity')} />
+      <div className="grid w-full grid-cols-3 items-center rounded-full border border-white/25 bg-white/12 px-1.5 py-1.5 backdrop-blur-xl">
+        <div className="flex justify-start">
+          <NavBtn active={tab === 'card'} onClick={() => setTab('card')} icon="card" label={t('card')} />
+        </div>
+        <div className="flex justify-center">
+          <button onClick={onPay} aria-label={t('pay')}
+            className="-mt-6 grid h-14 w-14 place-items-center rounded-full bg-white text-brand-deep shadow-md active:scale-95 transition">
+            <Icon name="send" className="w-6 h-6" />
+          </button>
+        </div>
+        <div />
       </div>
     </nav>
   );
